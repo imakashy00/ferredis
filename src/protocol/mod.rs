@@ -1,3 +1,3 @@
-// pub mod frame;
+pub mod frame;
 
-// pub use frame::Frame;
+pub use frame::Frame;
