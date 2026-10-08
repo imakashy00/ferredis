@@ -9,7 +9,9 @@ use clap::Parser;
 mod server;
 mod protocol;
 
+use crate::protocol::codec::{ decode, execute };
 use crate::server::Config;
+use crate::protocol::Frame;
 
 async fn handle_stream(mut stream: TcpStream) -> io::Result<()> {
     // Dynamically Growable buffer
@@ -22,22 +24,35 @@ async fn handle_stream(mut stream: TcpStream) -> io::Result<()> {
         if bytes == 0 {
             if !input_buffer.is_empty() {
                 eprintln!("Warning: Client disconnected, left partial frame: {:?}", input_buffer);
+            } else {
+                eprintln!("Client Disconnected!");
             }
-            println!("Client Disconnected!");
             return Ok(());
         }
+        loop {
+            match decode(&mut input_buffer) {
+                Ok(Some(Frame::Array(Some(items)))) if items.is_empty() => {
+                    continue;
+                }
+                // Execute the frame and store the encoded response in output buffer
+                Ok(Some(frame)) => execute(frame).encode(&mut output_buffer),
+                Ok(None) => {
+                    break;
+                } // no more bytes
+                Err(e) => {
+                    Frame::Error(format!("Protocol error: {e}")).encode(&mut output_buffer);
+                    stream.write_all(&output_buffer).await?;
+                    return Ok(());
+                }
+            }
+        }
 
-        // The upcoming bytes can be valid utf-8 or invalid text-chars
-        // from_utf_lossy used smart pointer Cow<_,str> for handling this situation
-        // If the byte is valid use Cow::borrowed(&str)-(Zero memory allocation cost) else Cow::owned(to_string)-(Needs to be fixed)
-        // Cow is smart pointer that optimize memory usage by avoiding unnecessary memory allocations
-        let command = String::from_utf8_lossy(&input_buffer[..bytes]); // convert till valid byte
-        println!("Received: {:?}", command);
-        input_buffer.clear(); // consume it so the next read starts fresh
-
-        stream.write_all(b"+OK\r\n").await?;
+        // One write for all the inputs
+        if !output_buffer.is_empty() {
+            stream.write_all(&output_buffer).await?;
+            output_buffer.clear();
+        }
     }
-    // Ok(())
 }
 
 #[tokio::main]
@@ -78,7 +93,7 @@ async fn main() -> io::Result<()> {
             }
             // failed to connect
             Err(error) => {
-                eprintln!("Error: {:?}", error);
+                eprintln!("Error in connection: {:?}", error);
             }
         }
     }
