@@ -10,7 +10,7 @@ mod protocol;
 mod core;
 
 use crate::core::keyspace::Ferredis;
-use crate::protocol::codec::execute;
+use crate::protocol::codec::dispatch;
 use crate::server::{ CommandMsg, Config, handle_stream };
 
 #[tokio::main]
@@ -33,9 +33,9 @@ async fn main() -> io::Result<()> {
     // Spawn the centralized Redis execution engine (Single-threaded execution state)
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
-        let mut db = Ferredis::new();
+        let mut db = Ferredis::new(config.maxmemory);
         while let Some(msg) = engine_rx.recv().await {
-            let response_frame = execute(&mut db, msg.frame);
+            let response_frame = dispatch(&mut db, msg.frame);
             // Send the result back to the specific client connection task
             let _ = msg.respond_to.send(response_frame);
         }

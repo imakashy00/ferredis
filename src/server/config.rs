@@ -8,7 +8,7 @@ pub struct Config {
     #[arg(long, default_value_t = String::from("127.0.0.1".to_string()))]
     pub bind: String,
     #[arg(long, default_value_t = 0)]
-    pub maxmemory: u64,
+    pub maxmemory: usize,
     #[arg(long, default_value_t = String::from("noeviction".to_string()))]
     pub maxmemory_policy: String,
     #[arg(long, default_value_t = 10000)]
