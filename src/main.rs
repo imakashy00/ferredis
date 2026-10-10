@@ -1,62 +1,21 @@
-use tokio::net::{ TcpListener, TcpStream };
-use tokio::io::{ AsyncReadExt, AsyncWriteExt };
-use tokio::sync::Semaphore;
+use tokio::net::TcpListener;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::{ Semaphore, mpsc };
 use std::io;
 use std::sync::Arc;
-use bytes::BytesMut;
 use clap::Parser;
 
 mod server;
 mod protocol;
+mod core;
 
-use crate::protocol::codec::{ decode, execute };
-use crate::server::Config;
-use crate::protocol::Frame;
-
-async fn handle_stream(mut stream: TcpStream) -> io::Result<()> {
-    // Dynamically Growable buffer
-    let mut input_buffer = BytesMut::new(); // I can use Vec<u8> with read_to_end and take but is messay and complex for persistent loop(for upcoming bytes in the stream)
-    let mut output_buffer = BytesMut::new(); // for sending output for commands
-
-    // loop for persistence connection
-    loop {
-        let bytes = stream.read_buf(&mut input_buffer).await?; // exact count of valid bytes recieved
-        if bytes == 0 {
-            if !input_buffer.is_empty() {
-                eprintln!("Warning: Client disconnected, left partial frame: {:?}", input_buffer);
-            } else {
-                eprintln!("Client Disconnected!");
-            }
-            return Ok(());
-        }
-        loop {
-            match decode(&mut input_buffer) {
-                Ok(Some(Frame::Array(Some(items)))) if items.is_empty() => {
-                    continue;
-                }
-                // Execute the frame and store the encoded response in output buffer
-                Ok(Some(frame)) => execute(frame).encode(&mut output_buffer),
-                Ok(None) => {
-                    break;
-                } // no more bytes
-                Err(e) => {
-                    Frame::Error(format!("Protocol error: {e}")).encode(&mut output_buffer);
-                    stream.write_all(&output_buffer).await?;
-                    return Ok(());
-                }
-            }
-        }
-
-        // One write for all the inputs
-        if !output_buffer.is_empty() {
-            stream.write_all(&output_buffer).await?;
-            output_buffer.clear();
-        }
-    }
-}
+use crate::core::keyspace::Ferredis;
+use crate::protocol::codec::execute;
+use crate::server::{ CommandMsg, Config, handle_stream };
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // TODO:: Graceful shutdown
     // Initialize config
     let config = Config::parse();
     let addr = format!("{}:{}", config.bind, config.port);
@@ -67,18 +26,45 @@ async fn main() -> io::Result<()> {
 
     // Semaphore control how many tasks or threads can access a shared resource at the same time
     let semaphore = Arc::new(Semaphore::new(config.maxclients as usize));
+    // Configure bounded channels
+    let (engine_tx, mut engine_rx) = mpsc::channel::<CommandMsg>(
+        config.engine_channel_capacity as usize
+    );
+    // Spawn the centralized Redis execution engine (Single-threaded execution state)
+    tokio::spawn(async move {
+        // Single threaded so no Arc<Mutex<>> required here 💪
+        let mut db = Ferredis::new();
+        while let Some(msg) = engine_rx.recv().await {
+            let response_frame = execute(&mut db, msg.frame);
+            // Send the result back to the specific client connection task
+            let _ = msg.respond_to.send(response_frame);
+        }
+    });
 
     //accept in loop for new incoming connections
     loop {
         match listener.accept().await {
             Ok((mut stream, _)) => {
+                // Enable TCP_NODELAY
+                // By default it is enabled to optimize bandwith
+                // Nagle Algo instructs Kernal to hold small packets of data and release only is reicieves (Acknowledgement)ACK or Maximum Segment Size(MSS) is reached
+                // for small data like +OK\r\n it becomes deadlock as kernal waits for ACK and client wait for response to send ACK
+                // When disabled Kernal transmit every samll packet without and confirmation or waiting - prioritizing low latency over packet size.
+                if let Err(e) = stream.set_nodelay(true) {
+                    eprintln!("Failed to set TCP_NODELAY: {:?}", e);
+                    continue; // Or handle error based on your strictness
+                }
+                // TODO::ENABLE TCP KEEPALIVE:
+
                 // Accquire permit without blocking the accept thread
                 let sem_clone = Arc::clone(&semaphore);
+                // Clone the Send Channel
+                let tx_clone = engine_tx.clone();
                 match sem_clone.try_acquire_owned() {
                     Ok(permit) => {
                         // spawn one task/bg task (green thread) per clinet
                         tokio::spawn(async move {
-                            if let Err(e) = handle_stream(stream).await {
+                            if let Err(e) = handle_stream(stream, tx_clone).await {
                                 eprintln!("Error handling stream: {:?}", e);
                             }
                             drop(permit); // drop to free the slot

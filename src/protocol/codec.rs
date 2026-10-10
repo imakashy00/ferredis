@@ -1,9 +1,10 @@
+// SCOPE:: MAX ouput buffer, IDLE timout
 use bytes::{ Buf, Bytes, BytesMut };
 
-use crate::protocol::{ Frame, frame::{ ProtocolError, error } };
+use crate::{ core::keyspace::Ferredis, protocol::{ Frame, frame::{ ProtocolError, error } } };
 
-// Cap bulk strings at 512 MB;
-const MAX_BULK_LEN: usize = 512 * 1024 * 1024;
+// Cap bulk strings at 64 MB;
+const MAX_BULK_LEN: usize = 64 * 1024 * 1024;
 const MAX_ARRAY_LEN: usize = 1024 * 1024;
 
 // Decode the frames from the front of the buffer
@@ -123,7 +124,7 @@ fn into_args(frame: Frame) -> Option<Vec<Bytes>> {
     }
 }
 
-pub fn execute(frame: Frame) -> Frame {
+pub fn execute(db: &mut Ferredis, frame: Frame) -> Frame {
     // Everything should be the array of bulk string
     let Some(args) = into_args(frame) else {
         return Frame::Error("ERR Protocol error: expected array of bulk strings".into());
@@ -137,6 +138,7 @@ pub fn execute(frame: Frame) -> Frame {
         b"ECHO" if args.len() == 2 => Frame::Bulk(Some(args[1].clone())),
         // redis-cli sends `COMMAND DOCS` on startup; an empty array keeps it happy 😊
         b"COMMAND" => Frame::Array(Some(vec![])),
+        b"CONFIG" => Frame::Array(Some(vec![])),
         _ => Frame::Error(format!("Unknown command '{}'", String::from_utf8_lossy(&args[0]))),
     }
 }
