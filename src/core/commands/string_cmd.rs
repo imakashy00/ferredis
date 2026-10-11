@@ -8,3 +8,27 @@ pub fn handle_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
 pub fn handle_get(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     Frame::Simple("SET".into())
 }
+pub fn handle_get_del(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_mset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_mget(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_incr(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_decr(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_incrby(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_decrby(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}
+pub fn handle_strlen(db: &mut Ferredis, args: &[Bytes]) -> Frame {
+    Frame::Simple("SET".into())
+}

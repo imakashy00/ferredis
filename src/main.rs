@@ -10,7 +10,7 @@ mod protocol;
 mod core;
 
 use crate::core::keyspace::Ferredis;
-use crate::protocol::codec::dispatch;
+use crate::protocol::dispatch;
 use crate::server::{ CommandMsg, Config, handle_stream };
 
 #[tokio::main]

@@ -1,14 +1,25 @@
-pub mod list;
-pub mod hashmap;
-pub mod set;
-pub mod string;
-pub mod keyspace;
-pub mod server;
-
 // Holds the command table
-// Check in coming Frame Array
-// check Arity and apply flags
-// Routes request to correct module
+
+use bytes::Bytes;
+
+use crate::{
+    core::{
+        commands::{
+            hashmap_cmd,
+            keyspace_cmd,
+            list_cmd,
+            pub_sub_cmd,
+            server_cmd,
+            set_cmd,
+            string_cmd,
+            transactions_cmd,
+        },
+        keyspace::Ferredis,
+    },
+    protocol::Frame,
+};
+// handler type
+type Handler = fn(&mut Ferredis, &[Bytes]) -> Frame;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CommandFlag {
@@ -25,6 +36,7 @@ pub struct CommandMetadata {
     pub first_key: i32,
     pub last_key: i32, // range boundary
     pub key_step: i32,
+    pub handler: Handler,
 }
 
 pub static COMMAND_TABLE: &[CommandMetadata] = &[
@@ -36,6 +48,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0, // Server commands touch NO database keys!
+        handler: server_cmd::handle_ping,
     },
     CommandMetadata {
         name: "ECHO",
@@ -44,6 +57,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0, // Server commands touch NO database keys!
+        handler: server_cmd::handle_echo,
     },
     CommandMetadata {
         name: "DBSIZE",
@@ -52,6 +66,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0, // Server commands touch NO database keys!
+        handler: server_cmd::handle_dbsize,
     },
     CommandMetadata {
         name: "FLUSHALL",
@@ -60,6 +75,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: server_cmd::handle_flushall,
     },
     CommandMetadata {
         name: "CONFIG GET",
@@ -68,6 +84,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: server_cmd::handle_config,
     },
     CommandMetadata {
         name: "CONFIG SET",
@@ -76,6 +93,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: server_cmd::handle_config,
     },
     CommandMetadata {
         name: "SAVE",
@@ -84,6 +102,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: server_cmd::handle_save,
     },
     CommandMetadata {
         name: "SHUTDOWN",
@@ -92,6 +111,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: server_cmd::handle_shutdown,
     },
     // Keyspace
     CommandMetadata {
@@ -101,6 +121,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1, // Every argument from index 1 to the end is a key!
+        handler: keyspace_cmd::handle_exists,
     },
     CommandMetadata {
         name: "DEL",
@@ -109,6 +130,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1, // Mutates multiple keys
+        handler: keyspace_cmd::handle_del,
     },
     CommandMetadata {
         name: "KEYS", // Returns all key names that match a pattern.
@@ -117,6 +139,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1, // Mutates multiple keys
+        handler: keyspace_cmd::handle_keys,
     },
     CommandMetadata {
         name: "TTL",
@@ -125,6 +148,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: keyspace_cmd::handle_ttl,
     },
     CommandMetadata {
         name: "EXPIRE",
@@ -133,6 +157,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: keyspace_cmd::handle_expire,
     },
     CommandMetadata {
         name: "PERSIST",
@@ -141,6 +166,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: keyspace_cmd::handle_persist,
     },
     CommandMetadata {
         name: "RENAME",
@@ -149,6 +175,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 2,
         key_step: 1, // First key is at 1, last key is at 2!
+        handler: keyspace_cmd::handle_rename,
     },
     // String
     CommandMetadata {
@@ -158,6 +185,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_get,
     },
     CommandMetadata {
         name: "SET",
@@ -166,6 +194,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_set,
     },
     CommandMetadata {
         name: "GETDEL",
@@ -174,6 +203,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_get_del,
     },
     CommandMetadata {
         name: "MSET", // Multiple SET
@@ -182,6 +212,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 2,
+        handler: string_cmd::handle_mset,
     },
 
     CommandMetadata {
@@ -191,6 +222,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1,
+        handler: string_cmd::handle_mget,
     },
     CommandMetadata {
         name: "INCR",
@@ -199,6 +231,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_incr,
     },
     CommandMetadata {
         name: "DECR",
@@ -207,6 +240,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_decr,
     },
     CommandMetadata {
         name: "INCRBY",
@@ -215,6 +249,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_incrby,
     },
     CommandMetadata {
         name: "DECRBY",
@@ -223,6 +258,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_decrby,
     },
     CommandMetadata {
         name: "STRLEN",
@@ -231,6 +267,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: string_cmd::handle_strlen,
     },
 
     // List (double-ended queue)
@@ -241,6 +278,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_lpush,
     },
     CommandMetadata {
         name: "RPUSH",
@@ -249,6 +287,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_rpush,
     },
     CommandMetadata {
         name: "LPOP",
@@ -257,6 +296,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_lpop,
     },
     CommandMetadata {
         name: "RPOP",
@@ -265,6 +305,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_rpop,
     },
     CommandMetadata {
         name: "LRANGE",
@@ -273,6 +314,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_lrange,
     },
     CommandMetadata {
         name: "LINDEX",
@@ -281,6 +323,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_lindex,
     },
     CommandMetadata {
         name: "LSET", // set value at ind
@@ -289,6 +332,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_lset,
     },
     CommandMetadata {
         name: "LREM", // remove value at ind
@@ -297,6 +341,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_lrem,
     },
     CommandMetadata {
         name: "LTRIM", // trims an existing list so that it contains only the specified range of elements
@@ -305,6 +350,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: list_cmd::handle_ltrim,
     },
     // Hashmap
     CommandMetadata {
@@ -314,6 +360,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hset,
     },
     CommandMetadata {
         name: "HGET",
@@ -322,6 +369,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hget,
     },
     CommandMetadata {
         name: "HMGET",
@@ -330,6 +378,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hmget,
     },
     CommandMetadata {
         name: "HEXISTS",
@@ -338,6 +387,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hexists,
     },
     CommandMetadata {
         name: "HLEN",
@@ -346,6 +396,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hlen,
     },
     CommandMetadata {
         name: "HGETALL",
@@ -354,6 +405,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hgetall,
     },
     CommandMetadata {
         name: "HKEYS",
@@ -362,6 +414,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hkeys,
     },
     CommandMetadata {
         name: "HVALS",
@@ -370,6 +423,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: hashmap_cmd::handle_hvals,
     },
 
     // Set
@@ -380,6 +434,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_sadd,
     },
     CommandMetadata {
         name: "SREM",
@@ -388,6 +443,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_srem,
     },
     CommandMetadata {
         name: "SISMEMBER",
@@ -396,6 +452,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_sismember,
     },
     CommandMetadata {
         name: "SMEMBERS",
@@ -404,6 +461,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_smembers,
     },
     CommandMetadata {
         name: "SCARD", // No of members in the set
@@ -412,6 +470,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_scard,
     },
     CommandMetadata {
         name: "SPOP",
@@ -420,6 +479,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_spop,
     },
     CommandMetadata {
         name: "SRANDMEMBER",
@@ -428,6 +488,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: 1,
         key_step: 1,
+        handler: set_cmd::handle_srandmember,
     },
     CommandMetadata {
         name: "SUNION", // returns union of multiple sets.
@@ -436,6 +497,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1,
+        handler: set_cmd::handle_sunion,
     },
     CommandMetadata {
         name: "SINTER", // returns the intersect of multiple sets.
@@ -444,6 +506,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1,
+        handler: set_cmd::handle_sinter,
     },
     CommandMetadata {
         name: "SDIFF", // returns the diff of multiple sets.
@@ -452,6 +515,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 1,
         last_key: -1,
         key_step: 1,
+        handler: set_cmd::handle_sdiff,
     },
     // Transactions
     CommandMetadata {
@@ -461,6 +525,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: transactions_cmd::handle_multi,
     },
     CommandMetadata {
         name: "EXEC",
@@ -469,6 +534,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: transactions_cmd::handle_exec,
     },
     // Pub/Sub
     CommandMetadata {
@@ -478,6 +544,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: pub_sub_cmd::handle_publish,
     },
     CommandMetadata {
         name: "UNSUBSCRIBE",
@@ -486,16 +553,6 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         first_key: 0,
         last_key: 0,
         key_step: 0,
+        handler: pub_sub_cmd::handle_subscribe,
     },
 ];
-
-// registry + one module per type parse(->)
-// 2. In commands/list.rs (The Request Handler)
-
-// This file parses the incoming RESP protocol frames, looks up the list in the database, runs the command, and formats the output client reply.
-// Method Name	Signature	What it does
-// parse_lpush	fn parse_lpush(args: Vec<Frame>) -> Result<(String, Vec<Vec<u8>>), Error>	Parse: Validates that the client passed a key name and at least one value. Converts RESP Frames into standard Rust types.
-// execute_lpush	fn execute_lpush(db: &mut Db, key: String, values: Vec<Vec<u8>>) -> Frame	Execute: Finds or creates the list under key in the database keyspace, loops through the values calling types::List::push_left, and returns an integer Frame representing the new list size.
-
-// Command Semantics.
-// Validates if the exact command rules are respected (correct number of items, right data types, flags).

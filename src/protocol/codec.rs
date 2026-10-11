@@ -1,12 +1,8 @@
-use std::fmt::format;
 
 // SCOPE:: MAX ouput buffer, IDLE timout
 use bytes::{ Buf, Bytes, BytesMut };
 
-use crate::{
-    core::{ commands::{ COMMAND_TABLE, CommandMetadata, server, string }, keyspace::Ferredis },
-    protocol::{ Frame, frame::{ ProtocolError, error } },
-};
+use crate::{ protocol::{ Frame, frame::{ ProtocolError, error } } };
 
 // Cap bulk strings at 64 MB;
 const MAX_BULK_LEN: usize = 64 * 1024 * 1024;
@@ -113,72 +109,11 @@ fn parse_int(line: &[u8]) -> Result<i64, ProtocolError> {
         .map_or_else(|| error("Invalid integer"), Ok)
 }
 // Commands arrive as an array of bulk strings: ["SET", "key", "value"]
-fn into_args(frame: Frame) -> Option<Vec<Bytes>> {
-    match frame {
-        Frame::Array(Some(items)) if !items.is_empty() =>
-            items
-                .into_iter()
-                .map(|f| {
-                    match f {
-                        Frame::Bulk(Some(b)) => Some(b),
-                        _ => None,
-                    }
-                })
-                .collect(),
-        _ => None,
-    }
-}
-fn find_metadata(cmd_name: &[u8]) -> Option<&'static CommandMetadata> {
-    COMMAND_TABLE.iter().find(|meta| meta.name.as_bytes() == cmd_name)
-}
-pub fn dispatch(db: &mut Ferredis, frame: Frame) -> Frame {
-    // Everything should be the array of bulk string
-    let Some(args) = into_args(frame) else {
-        return Frame::Error("ERR Protocol error: expected array of bulk strings".into());
-    };
-    let cmd_name = args[0].to_ascii_uppercase();
-    let metadata = match find_metadata(&cmd_name) {
-        Some(meta) => meta,
-        None => {
-            return Frame::Error(format!("Unknown command: {}", String::from_utf8_lossy(&cmd_name)));
-        }
-    };
-    // Arity check
-    let args_len = args.len() as i32;
-    let arity_valid = if metadata.arity >= 0 {
-        args_len == metadata.arity
-    } else {
-        args_len >= -metadata.arity
-    };
-    if !arity_valid {
-        return Frame::Error(
-            format!("ERR wrong number of arguments for '{}' command", metadata.name)
-        );
-    }
-    // check for oom
-    if
-        db.is_out_of_memory() &&
-        metadata.flags.contains(&crate::core::commands::CommandFlag::DenyOom)
-    {
-        return Frame::Error("OOM command not allowed when used memory > 'maxmemory'.".into());
-    }
-
-    match metadata.name {
-        "PING" => server::handle_ping(&args),
-        "ECHO" => server::handle_echo(&args),
-        "COMMAND" => server::handle_command(&args),
-        "CONFIG" => server::handle_config(&args),
-
-        // 🚀 This is where you will add your new String module commands next:
-        "SET" => string::handle_set(db, &args),
-        "GET" => string::handle_get(db, &args),
-
-        _ => Frame::Error("ERR command found in table but routing missing".into()),
-    }
-}
 
 #[cfg(test)]
 mod tests {
+    use crate::protocol::into_args;
+
     use super::*;
 
     fn bulk(s: &str) -> Frame {
