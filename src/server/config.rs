@@ -35,3 +35,54 @@ impl Default for Config {
         }
     }
 }
+impl Config {
+    pub fn get_field(&self, key: &str) -> Option<String> {
+        match key {
+            "port" => Some(self.port.to_string()),
+            "bind" => Some(self.bind.clone()),
+            "maxmemory" => Some(self.maxmemory.to_string()),
+            "maxmemory_policy" => Some(self.maxmemory_policy.clone()),
+            "maxclients" => Some(self.maxclients.to_string()),
+            "engine_channel_capacity" => Some(self.engine_channel_capacity.to_string()),
+            "appendonly" => Some(self.appendonly.to_string()),
+            "appendfilename" => Some(self.appendfilename.clone()),
+            _ => None,
+        }
+    }
+    pub fn set_value(&mut self, key: &str, value: &str) -> Result<(), &'static str> {
+        match key {
+            "port" => {
+                self.port = value.parse().map_err(|_| "Invalid Port value")?;
+            }
+            "bind" => {
+                self.bind = value.to_string();
+            }
+            "maxmemory" => {
+                self.maxmemory = value.parse().map_err(|_| "ERR Invalid maxmemory value")?;
+            }
+            "maxmemory_policy" => {
+                self.maxmemory_policy = value.to_string();
+            }
+            "maxclients" => {
+                self.maxmemory = value.parse().map_err(|_| "Err Invalid maxclients value")?;
+            }
+            "engine_channel_capacity" => {
+                self.engine_channel_capacity = value
+                    .parse()
+                    .map_err(|_| "ERR Invalid capacity value")?;
+            }
+            "appendonly" => {
+                self.appendonly = value
+                    .parse()
+                    .map_err(|_| "ERR Invalid appendonly value (expected true/false)")?;
+            }
+            "appendfilename" => {
+                self.appendfilename = value.to_string();
+            }
+            _ => {
+                return Err("ERR Unknown configuration parameter");
+            }
+        }
+        Ok(())
+    }
+}

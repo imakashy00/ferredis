@@ -33,7 +33,7 @@ async fn main() -> io::Result<()> {
     // Spawn the centralized Redis execution engine (Single-threaded execution state)
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
-        let mut db = Ferredis::new(config.maxmemory);
+        let mut db = Ferredis::new(config);
         while let Some(msg) = engine_rx.recv().await {
             let response_frame = dispatch(&mut db, msg.frame);
             // Send the result back to the specific client connection task

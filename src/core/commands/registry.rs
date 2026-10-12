@@ -60,6 +60,15 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         handler: server_cmd::handle_echo,
     },
     CommandMetadata {
+        name: "COMMANDS",
+        arity: 1,
+        flags: &[CommandFlag::ReadOnly],
+        first_key: 0,
+        last_key: 0,
+        key_step: 0, // Server commands touch NO database keys!
+        handler: server_cmd::handle_commands,
+    },
+    CommandMetadata {
         name: "DBSIZE",
         arity: 1,
         flags: &[CommandFlag::ReadOnly],
@@ -78,18 +87,9 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         handler: server_cmd::handle_flushall,
     },
     CommandMetadata {
-        name: "CONFIG GET",
-        arity: -3,
-        flags: &[CommandFlag::ReadOnly, CommandFlag::Admin],
-        first_key: 0,
-        last_key: 0,
-        key_step: 0,
-        handler: server_cmd::handle_config,
-    },
-    CommandMetadata {
-        name: "CONFIG SET",
-        arity: -4,
-        flags: &[CommandFlag::ReadOnly, CommandFlag::Admin],
+        name: "CONFIG",
+        arity: -2,
+        flags: &[CommandFlag::Admin],
         first_key: 0,
         last_key: 0,
         key_step: 0,
