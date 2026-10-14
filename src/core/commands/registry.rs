@@ -78,13 +78,13 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         handler: server_cmd::handle_dbsize,
     },
     CommandMetadata {
-        name: "FLUSHALL",
-        arity: 1, // Exact: FLUSHALL
+        name: "FLUSHDB",
+        arity: 1, // Exact: FLUSHDB
         flags: &[CommandFlag::Write, CommandFlag::Admin],
         first_key: 0,
         last_key: 0,
         key_step: 0,
-        handler: server_cmd::handle_flushall,
+        handler: server_cmd::handle_flushdb,
     },
     CommandMetadata {
         name: "CONFIG",
@@ -135,7 +135,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
     CommandMetadata {
         name: "KEYS", // Returns all key names that match a pattern.
         arity: 2,
-        flags: &[CommandFlag::Write],
+        flags: &[CommandFlag::ReadOnly],
         first_key: 1,
         last_key: -1,
         key_step: 1, // Mutates multiple keys
@@ -151,7 +151,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         handler: keyspace_cmd::handle_ttl,
     },
     CommandMetadata {
-        name: "EXPIRE",
+        name: "EXPIRE", // Set a timeout on key.
         arity: -3, // EXPIRE key seconds [NX | XX | GT | LT] (At least 3 args)
         flags: &[CommandFlag::Write],
         first_key: 1,
