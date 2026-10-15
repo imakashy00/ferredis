@@ -1,3 +1,12 @@
+pub mod string;
+pub mod set;
+pub mod list;
+pub mod hash;
+
+pub use string::*;
+pub use set::*;
+pub use list::*;
+pub use hash::*;
 // files has no idea what Redis or RESP is
 
 // Method Name	Signature	What it does

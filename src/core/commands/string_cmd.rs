@@ -1,12 +1,25 @@
 use bytes::Bytes;
 
-use crate::{ core::keyspace::Ferredis, protocol::Frame };
+use crate::{ core::{ keyspace::{ DataStruct, Ferredis }, types::fetch_with_key }, protocol::Frame };
 
 pub fn handle_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     todo!()
 }
 pub fn handle_get(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    todo!()
+    let key = &args[1];
+
+    // fetch the value form the map
+    match fetch_with_key(key, db) {
+        Some(DataStruct::String(bytes)) => {
+            return Frame::Bulk(Some(bytes.clone()));
+        }
+        Some(_) => {
+            return Frame::Error("Wrong Operation".into());
+        }
+        None => {
+            return Frame::Bulk(None);
+        }
+    }
 }
 pub fn handle_get_del(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     todo!()
