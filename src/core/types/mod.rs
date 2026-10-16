@@ -3,10 +3,48 @@ pub mod set;
 pub mod list;
 pub mod hash;
 
+use bytes::Bytes;
 pub use string::*;
 pub use set::*;
 pub use list::*;
 pub use hash::*;
+
+use crate::core::{ commands::keyspace_cmd::now_secs, keyspace::{ DataStruct, Entry, Ferredis } };
+
+pub fn fetch_value_with_key(key: &Bytes, db: &Ferredis) -> Option<DataStruct> {
+    match db.store.get(key) {
+        Some(entry) => {
+            // if its already expired then return Nil
+            if entry.expires_at < Some(now_secs()) {
+                return None;
+            } else {
+                // Return value
+                return Some(entry.value.clone());
+            }
+        }
+        None => {
+            // if not available return Nil
+            return None;
+        }
+    }
+}
+pub fn fetch_entry_with_key(key: &Bytes, db: &Ferredis) -> Option<Entry> {
+    match db.store.get(key) {
+        Some(entry) => {
+            // if its already expired then return Nil
+            if entry.expires_at < Some(now_secs()) {
+                return None;
+            } else {
+                // Return value
+                return Some(entry.clone());
+            }
+        }
+        None => {
+            // if not available return Nil
+            return None;
+        }
+    }
+}
 // files has no idea what Redis or RESP is
 
 // Method Name	Signature	What it does
