@@ -3,7 +3,7 @@ use std::{ time::{ SystemTime, UNIX_EPOCH } };
 use bytes::Bytes;
 use globset::GlobMatcher;
 
-use crate::{ core::keyspace::Ferredis, protocol::Frame };
+use crate::{ core::{ commands::now_secs, keyspace::Ferredis }, protocol::Frame };
 
 pub fn handle_exists(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // count the number of key exists if found then return 1 else 0
@@ -69,9 +69,6 @@ pub fn handle_ttl(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         }
         None => Frame::Integer(-2), // -2 for not exists
     }
-}
-pub fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("before 1970").as_secs()
 }
 pub fn handle_expire(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // A key with an associated timeout is often said to be 'volatile'

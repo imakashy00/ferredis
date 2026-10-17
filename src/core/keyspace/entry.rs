@@ -9,6 +9,12 @@ pub enum DataStruct {
     Hash(HashMap<Bytes, Bytes>),
     Set(HashSet<Bytes>),
 }
+pub enum DataType {
+    String,
+    List,
+    Hash,
+    Set,
+}
 
 #[derive(Debug, Clone)]
 pub struct Entry {

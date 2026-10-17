@@ -1,10 +1,9 @@
-use bytes::{ Buf, Bytes };
+use bytes::Bytes;
 
 use crate::{
     core::{
-        commands::keyspace_cmd::now_secs,
+        commands::{ fetch_entry_with_key, fetch_value_with_key, now_secs },
         keyspace::{ DataStruct, Entry, Ferredis },
-        types::{ fetch_entry_with_key, fetch_value_with_key },
     },
     protocol::Frame,
 };
@@ -12,7 +11,7 @@ use crate::{
 pub fn handle_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     let key = &args[1];
     let value = &args[2];
-    let expire_at = match args.len() {
+    let expire_after = match args.len() {
         3 => None,
         5 =>
             match String::from_utf8_lossy(&args[4]).as_ref().parse::<u64>() {
@@ -29,15 +28,25 @@ pub fn handle_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         db.current_memory_usage -= entry.approx_size;
     }
     let approx_size = 32 + value.len();
+    let expires_at = match expire_after {
+        Some(t) =>
+            match now_secs().checked_add(t) {
+                Some(deadline) => Some(deadline),
+                None => {
+                    return Frame::Error("ERR invalid expire time in 'set' command".into());
+                }
+            }
+        None => None,
+    };
     // store in db
     db.store.insert(key.clone(), Entry {
         value: DataStruct::String(value.clone()),
-        expires_at: expire_at,
+        expires_at: expires_at,
         last_access: now_secs(),
         approx_size: 32 + value.len(),
     });
     db.current_memory_usage += approx_size;
-    return Frame::Simple("Ok".into());
+    return Frame::Simple("OK".into());
 }
 pub fn handle_get(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     let key = &args[1];
@@ -59,19 +68,23 @@ pub fn handle_get_del(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // bulk string reply if value is present
     // None if key does not exists or key value is not a String
     let key = &args[1];
-    if let Some(value) = fetch_value_with_key(key, db) {
-        match value {
-            DataStruct::String(string_value) => {
-                // update delete and send value
-                db.store.remove(key);
-                return Frame::Bulk(Some(string_value));
-            }
-            _ => {
-                return Frame::Bulk(None);
-            }
+    let found = match fetch_value_with_key(key, db) {
+        Some(DataStruct::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Frame::Bulk(None);
         }
+
+        None => {
+            return Frame::Bulk(None);
+        }
+    };
+    match found {
+        Some(value) => {
+            db.store.remove(key);
+            Frame::Bulk(Some(value))
+        }
+        None => Frame::Bulk(None),
     }
-    Frame::Bulk(None)
 }
 pub fn handle_mset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // Simple String reply :: bcz mset can't fail to set correct data
@@ -91,7 +104,7 @@ pub fn handle_mset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         });
     }
 
-    Frame::Simple("Ok".into())
+    Frame::Simple("OK".into())
 }
 pub fn handle_mget(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // Array reply : list of values at specified keys
@@ -105,7 +118,7 @@ pub fn handle_mget(db: &mut Ferredis, args: &[Bytes]) -> Frame {
                         Some(value) => {
                             match value {
                                 DataStruct::String(string_value) => {
-                                    return Frame::Bulk(Some(string_value));
+                                    return Frame::Bulk(Some(string_value.clone()));
                                 }
                                 _ => {
                                     return Frame::Bulk(None);
@@ -148,7 +161,7 @@ pub fn handle_strlen(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     let key = &args[1];
     if let Some(data) = fetch_value_with_key(key, db) {
         match data {
-            DataStruct::String(mut value) => Frame::Integer(value.get_i64()),
+            DataStruct::String(value) => Frame::Integer(value.len() as i64),
             _ => {
                 return Frame::Integer(0);
             }
@@ -176,12 +189,11 @@ fn incr_by(db: &mut Ferredis, key: &Bytes, delta: i64) -> Frame {
             }
     };
     let Some(new_value) = current.checked_add(delta) else {
-        return Frame::Error("INteger overflow".into());
+        return Frame::Error("Integer overflow".into());
     };
     db.set_string_keep_ttl(key.clone(), Bytes::from(new_value.to_string()));
     Frame::Integer(new_value)
 }
-
 fn parse_i64(bytes: &[u8]) -> Option<i64> {
     let text = std::str::from_utf8(bytes).ok()?;
     let num: i64 = text.parse().ok()?;
@@ -190,4 +202,8 @@ fn parse_i64(bytes: &[u8]) -> Option<i64> {
     } else {
         None
     }
+}
+
+pub fn str_entry_size(key: &Bytes, value: &Bytes) -> usize {
+    32 + key.len() + value.len()
 }

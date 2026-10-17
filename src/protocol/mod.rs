@@ -1,7 +1,7 @@
 pub mod frame;
-pub mod codec;
 pub mod dispatcher;
+pub mod error;
 
-pub use frame::Frame;
-pub use codec::*;
+pub use frame::*;
 pub use dispatcher::*;
+pub use error::*;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bytes::Bytes;
 
-use crate::{ core::{ commands::keyspace_cmd::now_secs, keyspace::Entry }, server::Config };
+use crate::{ core::{ commands::now_secs, keyspace::{ DataType, Entry } }, server::Config };
 
 pub struct Ferredis {
     pub store: HashMap<Bytes, Entry>,
@@ -41,5 +41,9 @@ impl Ferredis {
                 });
             }
         }
+    }
+    pub fn update_dbsize(&mut self, fold_entry: Entry, new_entry: Entry, entry_type: DataType) {
+        // str_entry_size(key, value)
+        todo!()
     }
 }

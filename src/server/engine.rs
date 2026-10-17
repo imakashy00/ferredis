@@ -3,7 +3,7 @@ use std::io;
 use bytes::BytesMut;
 use tokio::{ io::{ AsyncReadExt, AsyncWriteExt }, net::TcpStream, sync::{ mpsc, oneshot } };
 
-use crate::protocol::{ Frame, codec::decode };
+use crate::protocol::{ Frame, decode };
 
 pub struct CommandMsg {
     pub frame: Frame,

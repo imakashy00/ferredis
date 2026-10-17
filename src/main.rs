@@ -74,6 +74,8 @@ async fn main() -> io::Result<()> {
                         println!("Rejected connection: maxclients limit reached.");
                         // stream drops here, closing the connection immediately}
                         let _ = stream.write_all(b"-ERR max number of clients reached\r\n").await;
+                        // Gracefully flush buffers and tell client we are done sending data
+                        let _ = stream.shutdown().await;
                     }
                 }
             }

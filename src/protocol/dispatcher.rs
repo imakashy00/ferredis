@@ -11,7 +11,7 @@ use crate::{
 pub fn dispatch(db: &mut Ferredis, frame: Frame) -> Frame {
     // Everything should be the array of bulk string
     let Some(args) = into_args(frame) else {
-        return Frame::Error("ERR Protocol error: expected array of bulk strings".into());
+        return Frame::Error("ERR Protocol: expected array of bulk strings".into());
     };
     let cmd_name = args[0].to_ascii_uppercase();
     let metadata = match find_metadata(&cmd_name) {
@@ -28,7 +28,7 @@ pub fn dispatch(db: &mut Ferredis, frame: Frame) -> Frame {
     }
     // check for oom
     if db.is_out_of_memory() && metadata.flags.contains(&CommandFlag::DenyOom) {
-        return Frame::Error("OOM command not allowed when used memory > 'maxmemory'.".into());
+        return Frame::Error("OOM: command not allowed when used memory > 'maxmemory'.".into());
     }
 
     (metadata.handler)(db, &args)
