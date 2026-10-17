@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::{ Buf, Bytes };
 
 use crate::{
     core::{
@@ -62,6 +62,8 @@ pub fn handle_get_del(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     if let Some(value) = fetch_value_with_key(key, db) {
         match value {
             DataStruct::String(string_value) => {
+                // update delete and send value
+                db.store.remove(key);
                 return Frame::Bulk(Some(string_value));
             }
             _ => {
@@ -120,17 +122,72 @@ pub fn handle_mget(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     )
 }
 pub fn handle_incr(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    todo!()
+    // ERR value is not an integer or out of range
+    incr_by(db, &args[1], 1)
 }
 pub fn handle_decr(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    todo!()
+    // ERR value is not an integer or out of range
+    incr_by(db, &args[1], -1)
 }
 pub fn handle_incrby(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    todo!()
+    let Some(delta) = parse_i64(&args[2]) else {
+        return Frame::Error("Err not integer".into());
+    };
+    incr_by(db, &args[1], delta)
 }
 pub fn handle_decrby(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    todo!()
+    let Some(delta) = parse_i64(&args[2]) else {
+        return Frame::Error("Err not integer".into());
+    };
+    let Some(negated) = delta.checked_neg() else {
+        return Frame::Error("ERR_OVERFLOW".into());
+    };
+    incr_by(db, &args[1], negated)
 }
 pub fn handle_strlen(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    todo!()
+    let key = &args[1];
+    if let Some(data) = fetch_value_with_key(key, db) {
+        match data {
+            DataStruct::String(mut value) => Frame::Integer(value.get_i64()),
+            _ => {
+                return Frame::Integer(0);
+            }
+        }
+    } else {
+        Frame::Integer(0)
+    }
+}
+
+fn incr_by(db: &mut Ferredis, key: &Bytes, delta: i64) -> Frame {
+    let current = match db.store.get(key) {
+        None => 0,
+        Some(entry) =>
+            match &entry.value {
+                DataStruct::String(bytes) =>
+                    match parse_i64(bytes) {
+                        Some(num) => num,
+                        None => {
+                            return Frame::Error("Err not int".into());
+                        }
+                    }
+                _ => {
+                    return Frame::Error("Err wrongtype".into());
+                }
+            }
+    };
+    let Some(new_value) = current.checked_add(delta) else {
+        return Frame::Error("INteger overflow".into());
+    };
+    db.set_string_keep_ttl(key.clone(), Bytes::from(new_value.to_string()));
+    Frame::Integer(new_value)
+}
+
+fn parse_i64(bytes: &[u8]) -> Option<i64> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let num: i64 = text.parse().ok()?;
+    if num.to_string().as_bytes() == bytes {
+        Some(num)
+    } else {
+        None
+    }
 }
