@@ -41,7 +41,7 @@ impl Frame {
                 buffer.put_slice(b"\r\n");
             }
             Frame::Array(None) => {
-                buffer.put_slice(b"*-1\r\n");
+                buffer.put_slice(b"*0\r\n");
             }
             Frame::Array(Some(items)) => {
                 buffer.put_u8(b'*');
