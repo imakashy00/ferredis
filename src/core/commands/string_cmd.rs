@@ -204,6 +204,4 @@ fn parse_i64(bytes: &[u8]) -> Option<i64> {
     }
 }
 
-pub fn str_entry_size(key: &Bytes, value: &Bytes) -> usize {
-    32 + key.len() + value.len()
-}
+
