@@ -1,14 +1,18 @@
 use tokio::net::TcpListener;
 use tokio::io::AsyncWriteExt;
+use tokio::select;
 use tokio::sync::{ Semaphore, mpsc };
+use tokio::time::{ MissedTickBehavior, interval };
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 use clap::Parser;
 
 mod server;
 mod protocol;
 mod core;
 
+use crate::core::eviction::active_expire;
 use crate::core::keyspace::Ferredis;
 use crate::protocol::dispatch;
 use crate::server::{ CommandMsg, Config, handle_stream };
@@ -34,11 +38,28 @@ async fn main() -> io::Result<()> {
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
         let mut db = Ferredis::new(config);
-        while let Some(msg) = engine_rx.recv().await {
-            let response_frame = dispatch(&mut db, msg.frame);
-            // Send the result back to the specific client connection task
-            let _ = msg.respond_to.send(response_frame);
+        let mut interval = interval(Duration::from_millis(100));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+            maybe_msg = engine_rx.recv() => match maybe_msg {
+                Some(msg) => {
+                    let reply = dispatch(&mut db, msg.frame);
+                    // Send the result back to the specific client connection task
+                    let _ = msg.respond_to.send(reply);
+                }
+                None => break,          // every sender dropped: shut down
+            },
+            _ = interval.tick() => {
+                active_expire::run_active_expiry(&mut db, Duration::from_millis(5));
+            }
         }
+        }
+        // while let Some(msg) = engine_rx.recv().await {
+        //     let response_frame = dispatch(&mut db, msg.frame);
+        //     // Send the result back to the specific client connection task
+        //     let _ = msg.respond_to.send(response_frame);
+        // }
     });
 
     //accept in loop for new incoming connections

@@ -2,17 +2,23 @@ use std::collections::HashMap;
 
 use bytes::Bytes;
 
-use crate::{ core::{ commands::now_secs, keyspace::{ DataType, Entry } }, server::Config };
+use crate::{ core::{ commands::now_secs, keyspace::{ Entry, TTLMap } }, server::Config };
 
 pub struct Ferredis {
     pub store: HashMap<Bytes, Entry>,
+    pub ttl_map: TTLMap,
     pub current_memory_usage: usize,
     pub config: Config,
 }
 
 impl Ferredis {
     pub fn new(config: Config) -> Self {
-        Ferredis { store: HashMap::new(), current_memory_usage: 0, config }
+        Ferredis {
+            store: HashMap::new(),
+            ttl_map: TTLMap::new(),
+            current_memory_usage: 0,
+            config,
+        }
     }
     pub fn is_out_of_memory(&self) -> bool {
         if self.config.maxmemory == 0 {
@@ -41,9 +47,5 @@ impl Ferredis {
                 });
             }
         }
-    }
-    pub fn update_dbsize(&mut self, fold_entry: Entry, new_entry: Entry, entry_type: DataType) {
-        // str_entry_size(key, value)
-        todo!()
     }
 }

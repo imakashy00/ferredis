@@ -9,12 +9,6 @@ pub enum DataStruct {
     Hash(HashMap<Bytes, Bytes>),
     Set(HashSet<Bytes>),
 }
-pub enum DataType {
-    String,
-    List,
-    Hash,
-    Set,
-}
 
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -24,4 +18,15 @@ pub struct Entry {
     // coarse logic timer tick loop
     pub last_access: u64,
     pub approx_size: usize,
+}
+
+pub struct TTLMap {
+    pub keys: Vec<Bytes>,
+    pub positions: HashMap<Bytes, usize>,
+}
+
+impl TTLMap {
+    pub fn new() -> Self {
+        TTLMap { keys: Vec::new(), positions: HashMap::new() }
+    }
 }

@@ -10,16 +10,10 @@ pub enum ProtocolError {
     InvalidUtf8,
     // length field is not num or -ve other than -1
     InvalidLength,
-    // Length too large for configured limit
-    LengthTooLarge,
     // Missing terminator CRLF
     MissingTerminator,
     // Invalid int
     InvalidInteger,
-    // Not array of bulk
-    ExpectedBulkArray,
-    // client's read buffer grew past the per-client limit
-    QueryTooLarge,
     // Read - write failure
     Io(io::Error),
 }
@@ -38,11 +32,8 @@ impl fmt::Display for ProtocolError {
                 write!(f, "invalid byte {}", (*b as char).escape_default()),
             ProtocolError::InvalidUtf8 => write!(f, "invalidutf8"),
             ProtocolError::InvalidLength => write!(f, "invalid length"),
-            ProtocolError::LengthTooLarge => write!(f, "length exceeds the allowed maximum"),
             ProtocolError::InvalidInteger => write!(f, "invalid integer"),
-            ProtocolError::ExpectedBulkArray => write!(f, "expected array of bulk strings"),
             ProtocolError::MissingTerminator => write!(f, "expected CRLF terminator"),
-            ProtocolError::QueryTooLarge => write!(f, "query buffer limit exceeded"),
             ProtocolError::Io(e) => write!(f, "io error {}", e),
         }
     }
