@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
 use bytes::Bytes;
+use nix::unistd::Pid;
 
 use crate::{ core::{ commands::now_secs, keyspace::{ Entry, TTLMap } }, server::Config };
 
 pub struct Ferredis {
     pub store: HashMap<Bytes, Entry>,
     pub ttl_map: TTLMap,
+    pub bg_child_pid: Option<Pid>,
     pub current_memory_usage: usize,
     pub config: Config,
 }
@@ -16,6 +18,7 @@ impl Ferredis {
         Ferredis {
             store: HashMap::new(),
             ttl_map: TTLMap::new(),
+            bg_child_pid: None,
             current_memory_usage: 0,
             config,
         }

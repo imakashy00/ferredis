@@ -1,6 +1,10 @@
 use bytes::Bytes;
+use nix::{ libc::exit, sys::wait::waitpid, unistd::{ ForkResult::{ self, Parent }, fork } };
 
-use crate::{ core::{ commands::registry::COMMAND_TABLE, keyspace::Ferredis }, protocol::Frame };
+use crate::{
+    core::{ commands::registry::COMMAND_TABLE, execute_binary_dump, keyspace::Ferredis },
+    protocol::Frame,
+};
 // hanlde ping
 pub fn handle_ping(_db: &mut Ferredis, _args: &[Bytes]) -> Frame {
     Frame::Simple("PONG".into())
@@ -101,11 +105,31 @@ pub fn handle_flushdb(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
     Frame::Simple("OK".to_string())
 }
 
-pub fn handle_save(_db: &mut Ferredis, _args: &[Bytes]) -> Frame {
+pub fn handle_save(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
     // lot of work required
     // 1. compression (LZF)
     // 2. metadata(db name, timestamp, sys arch)
     // 3. check data curruption
+    if db.bg_child_pid.is_some() {
+        return Frame::Error("ERR Background save already in progress".into());
+    }
+    match (unsafe { fork() }) {
+        Ok(ForkResult::Parent { child }) => {
+            // parent continue process
+            db.bg_child_pid = Some(child);
+            Frame::Simple("Background saving started".into());
+        }
+        Ok(ForkResult::Child) => {
+            // snapshot the entire db
+            if let Err(err) = execute_binary_dump(db) {
+                eprintln!("Failed to dump the db:{}", err);
+                std::process::exit(1);
+            }
+            // end the process
+            std::process::exit(0);
+        }
+        Err(_) => println!("Fork failed"),
+    }
     todo!()
 }
 pub fn handle_shutdown(_db: &mut Ferredis, _args: &[Bytes]) -> Frame {

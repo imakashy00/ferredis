@@ -1,6 +1,5 @@
 use tokio::net::TcpListener;
 use tokio::io::AsyncWriteExt;
-use tokio::select;
 use tokio::sync::{ Semaphore, mpsc };
 use tokio::time::{ MissedTickBehavior, interval };
 use std::io;
@@ -13,6 +12,7 @@ mod protocol;
 mod core;
 
 use crate::core::eviction::active_expire;
+use crate::core::handle_snapshot;
 use crate::core::keyspace::Ferredis;
 use crate::protocol::dispatch;
 use crate::server::{ CommandMsg, Config, handle_stream };
@@ -38,22 +38,27 @@ async fn main() -> io::Result<()> {
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
         let mut db = Ferredis::new(config);
-        let mut interval = interval(Duration::from_millis(100));
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut active_expire_interval = interval(Duration::from_millis(100));
+        active_expire_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        // Snapshot Process
+        let mut snapshot_interval = interval(Duration::from_millis(1000));
+        snapshot_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             tokio::select! {
-            maybe_msg = engine_rx.recv() => match maybe_msg {
-                Some(msg) => {
-                    let reply = dispatch(&mut db, msg.frame);
-                    // Send the result back to the specific client connection task
-                    let _ = msg.respond_to.send(reply);
-                }
-                None => break,          // every sender dropped: shut down
-            },
-            _ = interval.tick() => {
-                active_expire::run_active_expiry(&mut db, Duration::from_millis(5));
+                maybe_msg = engine_rx.recv() => match maybe_msg {
+                    Some(msg) => {
+                        let reply = dispatch(&mut db, msg.frame);
+                        // Send the result back to the specific client connection task
+                        let _ = msg.respond_to.send(reply);
+                    }
+                    None => break,          // every sender dropped: shut down
+                },
+                _ = active_expire_interval.tick() => {
+                    // active expiration
+                    active_expire::run_active_expiry(&mut db, Duration::from_millis(5));
+                },
+                _ = snapshot_interval.tick()=>{handle_snapshot(&mut db);} 
             }
-        }
         }
         // while let Some(msg) = engine_rx.recv().await {
         //     let response_frame = dispatch(&mut db, msg.frame);
