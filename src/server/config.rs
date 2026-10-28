@@ -17,8 +17,8 @@ pub struct Config {
     pub engine_channel_capacity: usize, // The maximum number of in-flight database commands that can wait in the pipe
     #[arg(long, default_value_t = false)]
     pub appendonly: bool,
-    #[arg(long, default_value_t = String::from("appendfilename.aof".to_string()))]
-    pub appendfilename: String, // to which file save data
+    #[arg(long, default_value_t = String::from("appendfilename.aof".to_string()))] // this should be a dir to store the temp and the original file
+    pub appenddir: String, // to which file save data
 }
 
 impl Default for Config {
@@ -31,7 +31,7 @@ impl Default for Config {
             maxclients: 10000,
             engine_channel_capacity: 1024,
             appendonly: false,
-            appendfilename: "appendfilename.aof".to_string(),
+            appenddir: "ferredis".to_string(),
         }
     }
 }
@@ -45,7 +45,7 @@ impl Config {
             "maxclients" => Some(self.maxclients.to_string()),
             "engine_channel_capacity" => Some(self.engine_channel_capacity.to_string()),
             "appendonly" => Some(self.appendonly.to_string()),
-            "appendfilename" => Some(self.appendfilename.clone()),
+            "appendfilename" => Some(self.appenddir.clone()),
             _ => None,
         }
     }
@@ -77,7 +77,7 @@ impl Config {
                     .map_err(|_| "ERR Invalid appendonly value (expected true/false)")?;
             }
             "appendfilename" => {
-                self.appendfilename = value.to_string();
+                self.appenddir = value.to_string();
             }
             _ => {
                 return Err("ERR Unknown configuration parameter");

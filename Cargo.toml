@@ -10,3 +10,5 @@ clap = { version = "4.0", features = ["derive"] }
 globset = "0.4.20"
 rand = "0.10.3"
 nix = { version = "0.29", features = ["process"] }
+dirs = "7.0.0"
+crc64fast = "1.1.0"

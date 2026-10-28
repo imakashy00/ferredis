@@ -37,7 +37,7 @@ async fn main() -> io::Result<()> {
     // Spawn the centralized Redis execution engine (Single-threaded execution state)
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
-        let mut db = Ferredis::new(config);
+        let mut db: Ferredis = Ferredis::new(config);
         let mut active_expire_interval = interval(Duration::from_millis(100));
         active_expire_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         // Snapshot Process
@@ -57,7 +57,7 @@ async fn main() -> io::Result<()> {
                     // active expiration
                     active_expire::run_active_expiry(&mut db, Duration::from_millis(5));
                 },
-                _ = snapshot_interval.tick()=>{handle_snapshot(&mut db);} 
+                _ = snapshot_interval.tick()=>{handle_snapshot(&mut db);}
             }
         }
         // while let Some(msg) = engine_rx.recv().await {

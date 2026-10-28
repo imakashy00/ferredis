@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use nix::{ libc::exit, sys::wait::waitpid, unistd::{ ForkResult::{ self, Parent }, fork } };
+use nix:: unistd::{ ForkResult::self, fork };
 
 use crate::{
     core::{ commands::registry::COMMAND_TABLE, execute_binary_dump, keyspace::Ferredis },
@@ -110,10 +110,11 @@ pub fn handle_save(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
     // 1. compression (LZF)
     // 2. metadata(db name, timestamp, sys arch)
     // 3. check data curruption
+
     if db.bg_child_pid.is_some() {
         return Frame::Error("ERR Background save already in progress".into());
     }
-    match (unsafe { fork() }) {
+    match unsafe { fork() } {
         Ok(ForkResult::Parent { child }) => {
             // parent continue process
             db.bg_child_pid = Some(child);
