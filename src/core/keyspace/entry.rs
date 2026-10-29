@@ -1,4 +1,4 @@
-use std::{ collections::{ HashMap, HashSet, VecDeque } };
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use bytes::Bytes;
 
@@ -27,6 +27,9 @@ pub struct TTLMap {
 
 impl TTLMap {
     pub fn new() -> Self {
-        TTLMap { keys: Vec::new(), positions: HashMap::new() }
+        TTLMap {
+            keys: Vec::new(),
+            positions: HashMap::new(),
+        }
     }
 }

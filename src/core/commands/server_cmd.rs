@@ -1,8 +1,8 @@
 use bytes::Bytes;
-use nix:: unistd::{ ForkResult::self, fork };
+use nix::unistd::{ForkResult, fork};
 
 use crate::{
-    core::{ commands::registry::COMMAND_TABLE, execute_binary_dump, keyspace::Ferredis },
+    core::{commands::registry::COMMAND_TABLE, execute_binary_dump, keyspace::Ferredis},
     protocol::Frame,
 };
 // hanlde ping
@@ -19,33 +19,30 @@ pub fn handle_echo(_db: &mut Ferredis, args: &[Bytes]) -> Frame {
 }
 // handle commands
 pub fn handle_commands(_db: &mut Ferredis, _args: &[Bytes]) -> Frame {
-    Frame::Array(
-        Some(
-            COMMAND_TABLE.iter()
-                .map(|command| Frame::Simple(command.name.to_string()))
-                .collect()
-        )
-    )
+    Frame::Array(Some(
+        COMMAND_TABLE
+            .iter()
+            .map(|command| Frame::Simple(command.name.to_string()))
+            .collect(),
+    ))
 }
 // config get
 pub fn handle_config_get(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    Frame::Array(
-        Some(
-            args
-                .iter()
-                .skip(2)
-                .map(|arg| String::from_utf8_lossy(arg).to_lowercase())
-                .flat_map(|key| {
-                    db.config
-                        .get_field(&key)
-                        .map(|value|
-                            vec![Frame::Bulk(Some(key.into())), Frame::Bulk(Some(value.into()))]
-                        )
+    Frame::Array(Some(
+        args.iter()
+            .skip(2)
+            .map(|arg| String::from_utf8_lossy(arg).to_lowercase())
+            .flat_map(|key| {
+                db.config.get_field(&key).map(|value| {
+                    vec![
+                        Frame::Bulk(Some(key.into())),
+                        Frame::Bulk(Some(value.into())),
+                    ]
                 })
-                .flatten()
-                .collect()
-        )
-    )
+            })
+            .flatten()
+            .collect(),
+    ))
 }
 // config set
 pub fn handle_config_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
@@ -71,29 +68,28 @@ pub fn handle_config(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     match sub_cmd.as_slice() {
         b"GET" => {
             if args.len() < 3 {
-                Frame::Error(
-                    format!(
-                        "ERR Unknown arguments to config: {}",
-                        String::from_utf8_lossy(&sub_cmd)
-                    )
-                )
+                Frame::Error(format!(
+                    "ERR Unknown arguments to config: {}",
+                    String::from_utf8_lossy(&sub_cmd)
+                ))
             } else {
                 handle_config_get(db, args)
             }
         }
         b"SET" => {
             if args.len() < 4 {
-                Frame::Error(
-                    format!("Missing arguments to config: {}", String::from_utf8_lossy(&sub_cmd))
-                )
+                Frame::Error(format!(
+                    "Missing arguments to config: {}",
+                    String::from_utf8_lossy(&sub_cmd)
+                ))
             } else {
                 handle_config_set(db, args)
             }
         }
-        _ =>
-            Frame::Error(
-                format!("ERR Unknown arguments to config: {}", String::from_utf8_lossy(&sub_cmd))
-            ),
+        _ => Frame::Error(format!(
+            "ERR Unknown arguments to config: {}",
+            String::from_utf8_lossy(&sub_cmd)
+        )),
     }
 }
 pub fn handle_dbsize(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
@@ -106,11 +102,6 @@ pub fn handle_flushdb(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
 }
 
 pub fn handle_save(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
-    // lot of work required
-    // 1. compression (LZF)
-    // 2. metadata(db name, timestamp, sys arch)
-    // 3. check data curruption
-
     if db.bg_child_pid.is_some() {
         return Frame::Error("ERR Background save already in progress".into());
     }
@@ -118,10 +109,10 @@ pub fn handle_save(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
         Ok(ForkResult::Parent { child }) => {
             // parent continue process
             db.bg_child_pid = Some(child);
-            Frame::Simple("Background saving started".into());
+            Frame::Simple("Background saving started".into())
         }
         Ok(ForkResult::Child) => {
-            // snapshot the entire db
+            // snapshot entire db
             if let Err(err) = execute_binary_dump(db) {
                 eprintln!("Failed to dump the db:{}", err);
                 std::process::exit(1);
@@ -129,9 +120,10 @@ pub fn handle_save(db: &mut Ferredis, _args: &[Bytes]) -> Frame {
             // end the process
             std::process::exit(0);
         }
-        Err(_) => println!("Fork failed"),
+        Err(_) => {
+            return Frame::Error("ERR Saving failed".into());
+        }
     }
-    todo!()
 }
 pub fn handle_shutdown(_db: &mut Ferredis, _args: &[Bytes]) -> Frame {
     todo!()

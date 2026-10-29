@@ -1,4 +1,4 @@
-use std::{ fmt, io };
+use std::{fmt, io};
 
 use crate::protocol::Frame;
 
@@ -28,8 +28,10 @@ impl fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProtocolError::InvalidType(b) =>
-                // escape default help printing the char without getting converted like \n, \t
-                write!(f, "invalid byte {}", (*b as char).escape_default()),
+            // escape default help printing the char without getting converted like \n, \t
+            {
+                write!(f, "invalid byte {}", (*b as char).escape_default())
+            }
             ProtocolError::InvalidUtf8 => write!(f, "invalidutf8"),
             ProtocolError::InvalidLength => write!(f, "invalid length"),
             ProtocolError::InvalidInteger => write!(f, "invalid integer"),

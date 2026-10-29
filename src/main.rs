@@ -1,21 +1,21 @@
-use tokio::net::TcpListener;
-use tokio::io::AsyncWriteExt;
-use tokio::sync::{ Semaphore, mpsc };
-use tokio::time::{ MissedTickBehavior, interval };
+use clap::Parser;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
-use clap::Parser;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+use tokio::sync::{Semaphore, mpsc};
+use tokio::time::{MissedTickBehavior, interval};
 
-mod server;
-mod protocol;
 mod core;
+mod protocol;
+mod server;
 
 use crate::core::eviction::active_expire;
-use crate::core::handle_snapshot;
 use crate::core::keyspace::Ferredis;
+use crate::core::{handle_snapshot, parse_snapshot_file};
 use crate::protocol::dispatch;
-use crate::server::{ CommandMsg, Config, handle_stream };
+use crate::server::{CommandMsg, Config, handle_stream};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -23,7 +23,9 @@ async fn main() -> io::Result<()> {
     // Initialize config
     let config = Config::parse();
     let addr = format!("{}:{}", config.bind, config.port);
-
+    let mut db: Ferredis = Ferredis::new(config.clone());
+    // Parse snapshot file and load db
+    parse_snapshot_file(config.snap_dir.clone(), &mut db)?;
     // Bind Port
     let listener = TcpListener::bind(addr).await?;
     eprintln!("Server running on port:6379...");
@@ -31,13 +33,12 @@ async fn main() -> io::Result<()> {
     // Semaphore control how many tasks or threads can access a shared resource at the same time
     let semaphore = Arc::new(Semaphore::new(config.maxclients as usize));
     // Configure bounded channels
-    let (engine_tx, mut engine_rx) = mpsc::channel::<CommandMsg>(
-        config.engine_channel_capacity as usize
-    );
+    let (engine_tx, mut engine_rx) =
+        mpsc::channel::<CommandMsg>(config.engine_channel_capacity as usize);
     // Spawn the centralized Redis execution engine (Single-threaded execution state)
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
-        let mut db: Ferredis = Ferredis::new(config);
+        // let mut db: Ferredis = Ferredis::new(config);
         let mut active_expire_interval = interval(Duration::from_millis(100));
         active_expire_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         // Snapshot Process
@@ -60,11 +61,6 @@ async fn main() -> io::Result<()> {
                 _ = snapshot_interval.tick()=>{handle_snapshot(&mut db);}
             }
         }
-        // while let Some(msg) = engine_rx.recv().await {
-        //     let response_frame = dispatch(&mut db, msg.frame);
-        //     // Send the result back to the specific client connection task
-        //     let _ = msg.respond_to.send(response_frame);
-        // }
     });
 
     //accept in loop for new incoming connections
@@ -99,7 +95,9 @@ async fn main() -> io::Result<()> {
                     Err(_) => {
                         println!("Rejected connection: maxclients limit reached.");
                         // stream drops here, closing the connection immediately}
-                        let _ = stream.write_all(b"-ERR max number of clients reached\r\n").await;
+                        let _ = stream
+                            .write_all(b"-ERR max number of clients reached\r\n")
+                            .await;
                         // Gracefully flush buffers and tell client we are done sending data
                         let _ = stream.shutdown().await;
                     }

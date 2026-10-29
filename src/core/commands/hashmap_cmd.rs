@@ -4,8 +4,8 @@ use bytes::Bytes;
 
 use crate::{
     core::{
-        commands::{ fetch_entry_with_key, now_secs },
-        keyspace::{ DataStruct, Entry, Ferredis },
+        commands::{fetch_entry_with_key, now_secs},
+        keyspace::{DataStruct, Entry, Ferredis},
     },
     protocol::Frame,
 };
@@ -35,8 +35,8 @@ fn handle_get(key: &Bytes, db: &mut Ferredis, fields: &[Bytes], get_type: GetTyp
                 }
             }
             match get_type {
-                GetType::Get => { frames[0].clone() }
-                GetType::Mget => { Frame::Array(Some(frames)) }
+                GetType::Get => frames[0].clone(),
+                GetType::Mget => Frame::Array(Some(frames)),
             }
         }
         // No entry found
@@ -62,12 +62,15 @@ pub fn handle_hset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         Some(true) => {}
         // No entry found
         None => {
-            db.store.insert(key.clone(), Entry {
-                value: DataStruct::Hash(HashMap::new()),
-                expires_at: None,
-                last_access: now_secs(),
-                approx_size: size_of_val(&key), // TODO: calculate correctly
-            });
+            db.store.insert(
+                key.clone(),
+                Entry {
+                    value: DataStruct::Hash(HashMap::new()),
+                    expires_at: None,
+                    last_access: now_secs(),
+                    approx_size: size_of_val(&key), // TODO: calculate correctly
+                },
+            );
         }
     }
     let Some(entry) = fetch_entry_with_key(key, db) else {

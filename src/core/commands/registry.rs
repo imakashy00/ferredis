@@ -5,13 +5,7 @@ use bytes::Bytes;
 use crate::{
     core::{
         commands::{
-            hashmap_cmd,
-            keyspace_cmd,
-            list_cmd,
-            pub_sub_cmd,
-            server_cmd,
-            set_cmd,
-            string_cmd,
+            hashmap_cmd, keyspace_cmd, list_cmd, pub_sub_cmd, server_cmd, set_cmd, string_cmd,
             transactions_cmd,
         },
         keyspace::Ferredis,
@@ -152,7 +146,7 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
     },
     CommandMetadata {
         name: "EXPIRE", // Set a timeout on key.
-        arity: -3, // EXPIRE key seconds [NX | XX | GT | LT] (At least 3 args)
+        arity: -3,      // EXPIRE key seconds [NX | XX | GT | LT] (At least 3 args)
         flags: &[CommandFlag::Write],
         first_key: 1,
         last_key: 1,
@@ -214,7 +208,6 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         key_step: 2,
         handler: string_cmd::handle_mset,
     },
-
     CommandMetadata {
         name: "MGET",
         arity: -2,
@@ -269,7 +262,6 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         key_step: 1,
         handler: string_cmd::handle_strlen,
     },
-
     // List (double-ended queue)
     CommandMetadata {
         name: "LPUSH",
@@ -425,7 +417,6 @@ pub static COMMAND_TABLE: &[CommandMetadata] = &[
         key_step: 1,
         handler: hashmap_cmd::handle_hvals,
     },
-
     // Set
     CommandMetadata {
         name: "SADD",

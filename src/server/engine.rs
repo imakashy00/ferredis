@@ -1,9 +1,13 @@
 use std::io;
 
 use bytes::BytesMut;
-use tokio::{ io::{ AsyncReadExt, AsyncWriteExt }, net::TcpStream, sync::{ mpsc, oneshot } };
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::{mpsc, oneshot},
+};
 
-use crate::protocol::{ Frame, decode };
+use crate::protocol::{Frame, decode};
 
 pub struct CommandMsg {
     pub frame: Frame,
@@ -21,7 +25,10 @@ pub async fn handle_stream(mut stream: TcpStream, tx: mpsc::Sender<CommandMsg>) 
         let bytes = stream.read_buf(&mut input_buffer).await?; // exact count of valid bytes recieved
         if bytes == 0 {
             if !input_buffer.is_empty() {
-                eprintln!("Warning: Client disconnected, left partial frame: {:?}", input_buffer);
+                eprintln!(
+                    "Warning: Client disconnected, left partial frame: {:?}",
+                    input_buffer
+                );
             } else {
                 eprintln!("Client Disconnected!");
             }
@@ -41,7 +48,14 @@ pub async fn handle_stream(mut stream: TcpStream, tx: mpsc::Sender<CommandMsg>) 
                     // BACK-PRESSURE HAPPENS HERE:
                     // If the Engine(Server) queue has 1024 items(CommandMSg), this .send().await pauses this entire task loop.
                     // The task stops reading from `stream`, forcing the client's TCP stack to stall.
-                    if tx.send(CommandMsg { frame, respond_to: reply_tx }).await.is_err() {
+                    if tx
+                        .send(CommandMsg {
+                            frame,
+                            respond_to: reply_tx,
+                        })
+                        .await
+                        .is_err()
+                    {
                         return Err(io::Error::new(io::ErrorKind::BrokenPipe, "Engine shutdown"));
                     }
                     // Wait for the single-threaded engine to finish our job

@@ -1,24 +1,27 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 
 #[derive(Debug, Clone, Parser)]
 #[command(author, version, about = "A custom Redis-like server", long_about = None)]
 pub struct Config {
-    #[arg(long, default_value_t = 6379)]
+    #[arg(long, default_value_t = Config::default().port)]
     pub port: u16,
-    #[arg(long, default_value_t = String::from("127.0.0.1".to_string()))]
+    #[arg(long, default_value_t = Config::default().bind)]
     pub bind: String,
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = Config::default().maxmemory)]
     pub maxmemory: usize,
-    #[arg(long, default_value_t = String::from("noeviction".to_string()))]
+    #[arg(long, default_value_t = Config::default().maxmemory_policy)]
     pub maxmemory_policy: String,
-    #[arg(long, default_value_t = 10000)]
+    #[arg(long, default_value_t = Config::default().maxclients)]
     pub maxclients: u32, //The maximum number of clients connections
-    #[arg(long, default_value_t = 1024)]
+    #[arg(long, default_value_t = Config::default().engine_channel_capacity)]
     pub engine_channel_capacity: usize, // The maximum number of in-flight database commands that can wait in the pipe
-    #[arg(long, default_value_t = false)]
-    pub appendonly: bool,
-    #[arg(long, default_value_t = String::from("appendfilename.aof".to_string()))] // this should be a dir to store the temp and the original file
-    pub appenddir: String, // to which file save data
+    #[arg(long, default_value_t = Config::default().snapshot)]
+    pub snapshot: bool,
+    #[arg(long, default_value_os_t = Config::default().snap_dir)]
+    // os_t uses into() whereas _t() uses .to_string()
+    pub snap_dir: PathBuf, // to which dir save data
 }
 
 impl Default for Config {
@@ -30,8 +33,11 @@ impl Default for Config {
             maxmemory_policy: "noeviction".to_string(),
             maxclients: 10000,
             engine_channel_capacity: 1024,
-            appendonly: false,
-            appenddir: "ferredis".to_string(),
+            snapshot: false,
+            snap_dir: match dirs::home_dir() {
+                Some(path) => path,
+                None => PathBuf::from("ferredis"),
+            },
         }
     }
 }
@@ -44,8 +50,8 @@ impl Config {
             "maxmemory_policy" => Some(self.maxmemory_policy.clone()),
             "maxclients" => Some(self.maxclients.to_string()),
             "engine_channel_capacity" => Some(self.engine_channel_capacity.to_string()),
-            "appendonly" => Some(self.appendonly.to_string()),
-            "appendfilename" => Some(self.appenddir.clone()),
+            "snapshot" => Some(self.snap_dir.display().to_string()),
+            "snap_dir" => Some(self.snap_dir.to_string_lossy().to_string()),
             _ => None,
         }
     }
@@ -67,17 +73,16 @@ impl Config {
                 self.maxmemory = value.parse().map_err(|_| "Err Invalid maxclients value")?;
             }
             "engine_channel_capacity" => {
-                self.engine_channel_capacity = value
-                    .parse()
-                    .map_err(|_| "ERR Invalid capacity value")?;
+                self.engine_channel_capacity =
+                    value.parse().map_err(|_| "ERR Invalid capacity value")?;
             }
-            "appendonly" => {
-                self.appendonly = value
+            "snapshot" => {
+                self.snapshot = value
                     .parse()
                     .map_err(|_| "ERR Invalid appendonly value (expected true/false)")?;
             }
-            "appendfilename" => {
-                self.appenddir = value.to_string();
+            "snap_dir" => {
+                self.snap_dir = PathBuf::from(value);
             }
             _ => {
                 return Err("ERR Unknown configuration parameter");

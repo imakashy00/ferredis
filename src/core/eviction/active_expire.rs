@@ -1,6 +1,9 @@
-use std::{ time::{ Duration } };
+use std::time::Duration;
 
-use crate::core::{ commands::{ fetch_entry_with_key, now_secs }, keyspace::Ferredis };
+use crate::core::{
+    commands::{fetch_entry_with_key, now_secs},
+    keyspace::Ferredis,
+};
 use bytes::Bytes;
 use rand::seq::index;
 // Run a infinite loop using tokio
@@ -14,8 +17,7 @@ pub fn run_active_expiry(db: &mut Ferredis, time_budget: Duration) {
             break;
         }
         // get the sample vector
-        let sample: Vec<Bytes> = index
-            ::sample(&mut rng, length, amount)
+        let sample: Vec<Bytes> = index::sample(&mut rng, length, amount)
             .iter()
             .map(|i| db.ttl_map.keys[i].clone())
             .collect();

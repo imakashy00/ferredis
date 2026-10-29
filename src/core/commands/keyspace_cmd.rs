@@ -1,29 +1,25 @@
-use std::{ time::{ SystemTime, UNIX_EPOCH } };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use globset::GlobMatcher;
 
-use crate::{ core::{ commands::now_secs, keyspace::Ferredis }, protocol::Frame };
+use crate::{
+    core::{commands::now_secs, keyspace::Ferredis},
+    protocol::Frame,
+};
 
 pub fn handle_exists(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // count the number of key exists if found then return 1 else 0
     Frame::Integer(
-        args
-            .iter()
+        args.iter()
             .skip(1)
             .map(|key| db.store.contains_key(key))
-            .count() as i64
+            .count() as i64,
     )
 }
 pub fn handle_del(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // deletes the existing keys in db else ignores and sends Frame::Integer for deleted keys
-    Frame::Integer(
-        args
-            .iter()
-            .skip(1)
-            .map(|key| db.store.remove(key))
-            .count() as i64
-    )
+    Frame::Integer(args.iter().skip(1).map(|key| db.store.remove(key)).count() as i64)
 }
 pub fn handle_keys(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // convert the key pattern in to glob str
@@ -36,18 +32,16 @@ pub fn handle_keys(db: &mut Ferredis, args: &[Bytes]) -> Frame {
             return Frame::Error("ERR invalid pattern syntax".to_string());
         }
     };
-    Frame::Array(
-        Some(
-            db.store
-                .keys()
-                // The '&*' derefs the Cow<str> into a &str, which implements AsRef<Path>.
-                // is_match method take path that implments As Ref
-                // '&*' takes a smart pointer wrapper, drills down to its inner value, and gives us a clean, standard borrow
-                .filter(|key| matcher.is_match(&*String::from_utf8_lossy(key.as_ref().as_ref())))
-                .map(|key| Frame::Bulk(Some(key.clone())))
-                .collect()
-        )
-    )
+    Frame::Array(Some(
+        db.store
+            .keys()
+            // The '&*' derefs the Cow<str> into a &str, which implements AsRef<Path>.
+            // is_match method take path that implments As Ref
+            // '&*' takes a smart pointer wrapper, drills down to its inner value, and gives us a clean, standard borrow
+            .filter(|key| matcher.is_match(&*String::from_utf8_lossy(key.as_ref().as_ref())))
+            .map(|key| Frame::Bulk(Some(key.clone())))
+            .collect(),
+    ))
 }
 pub fn handle_ttl(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // Returns the remaining time to live of a key that has a timeout.
@@ -57,7 +51,10 @@ pub fn handle_ttl(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         Some(entry) => {
             match entry.expires_at {
                 Some(expire_at) => {
-                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
                     if expire_at > now {
                         Frame::Integer((expire_at - now) as i64) // else (integer) seconds
                     } else {
@@ -83,10 +80,10 @@ pub fn handle_expire(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         return Frame::Error("ERR wrong number of arguments for 'expire' command".into());
     }
     // check time
-    let Some(secs) = std::str
-        ::from_utf8(&args[2])
+    let Some(secs) = std::str::from_utf8(&args[2])
         .ok()
-        .and_then(|s| s.parse::<i64>().ok()) else {
+        .and_then(|s| s.parse::<i64>().ok())
+    else {
         return Frame::Error("ERR value is not an integer or out of range".into());
     };
     // no entry
@@ -114,7 +111,10 @@ pub fn handle_expire(db: &mut Ferredis, args: &[Bytes]) -> Frame {
 }
 
 pub fn handle_persist(db: &mut Ferredis, args: &[Bytes]) -> Frame {
-    let had_ttl = db.store.get_mut(&args[1]).is_some_and(|entry| entry.expires_at.take().is_some());
+    let had_ttl = db
+        .store
+        .get_mut(&args[1])
+        .is_some_and(|entry| entry.expires_at.take().is_some());
     Frame::Integer(had_ttl as i64)
 }
 pub fn handle_rename(db: &mut Ferredis, args: &[Bytes]) -> Frame {

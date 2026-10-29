@@ -4,8 +4,8 @@ use bytes::Bytes;
 
 use crate::{
     core::{
-        commands::{ fetch_entry_with_key, now_secs },
-        keyspace::{ DataStruct, Entry, Ferredis },
+        commands::{fetch_entry_with_key, now_secs},
+        keyspace::{DataStruct, Entry, Ferredis},
     },
     protocol::Frame,
 };
@@ -24,12 +24,15 @@ fn handle_push(key: &Bytes, values: &[Bytes], push: Direction, db: &mut Ferredis
         Some(true) => {}
         // not found
         None => {
-            db.store.insert(key.clone(), Entry {
-                value: DataStruct::List(VecDeque::new()),
-                expires_at: None,
-                last_access: now_secs(),
-                approx_size: 32 + key.len(),
-            });
+            db.store.insert(
+                key.clone(),
+                Entry {
+                    value: DataStruct::List(VecDeque::new()),
+                    expires_at: None,
+                    last_access: now_secs(),
+                    approx_size: 32 + key.len(),
+                },
+            );
         }
     }
     // if key does not exist create one empty list
@@ -69,13 +72,12 @@ fn handle_pop(args: &[Bytes], pop: Direction, db: &mut Ferredis) -> Frame {
         return Frame::Error("Err: Wrong number of arguments".into());
     }
     let mut count = match args.get(2) {
-        Some(value) =>
-            match String::from_utf8_lossy(value).parse::<u32>() {
-                Ok(val) => val,
-                Err(_) => {
-                    return Frame::Error("Failed to parse".into());
-                }
+        Some(value) => match String::from_utf8_lossy(value).parse::<u32>() {
+            Ok(val) => val,
+            Err(_) => {
+                return Frame::Error("Failed to parse".into());
             }
+        },
         None => 1,
     };
     let Some(entry) = fetch_entry_with_key(key, db) else {
@@ -189,7 +191,11 @@ pub fn handle_lindex(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         return Frame::Error("WRONGTYPE".into());
     };
 
-    ind = if ind < 0 { (list.len() as i32) + ind } else { ind };
+    ind = if ind < 0 {
+        (list.len() as i32) + ind
+    } else {
+        ind
+    };
 
     if ind < 0 || ind > (list.len() as i32) {
         return Frame::Bulk(None);
@@ -214,7 +220,11 @@ pub fn handle_lset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     let DataStruct::List(list) = &mut entry.value else {
         return Frame::Error("WRONGTYPE".into());
     };
-    ind = if ind < 0 { (list.len() as i32) + ind } else { ind };
+    ind = if ind < 0 {
+        (list.len() as i32) + ind
+    } else {
+        ind
+    };
     if ind < 0 || ind > (list.len() as i32) {
         return Frame::Error("Index out of bound".into());
     }
@@ -223,11 +233,9 @@ pub fn handle_lset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
 }
 pub fn handle_lrem(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     let key = &args[1];
-    let count: i64 = match
-        std::str
-            ::from_utf8(&args[2])
-            .ok()
-            .and_then(|s| s.parse().ok())
+    let count: i64 = match std::str::from_utf8(&args[2])
+        .ok()
+        .and_then(|s| s.parse().ok())
     {
         Some(n) => n,
         None => {
@@ -259,10 +267,7 @@ pub fn handle_lrem(db: &mut Ferredis, args: &[Bytes]) -> Frame {
             }
         });
     } else {
-        let total = list
-            .iter()
-            .filter(|x| *x == element)
-            .count();
+        let total = list.iter().filter(|x| *x == element).count();
         let mut to_keep = total.saturating_sub(limit); // earliest matches survive
         list.retain(|x| {
             if x != element {

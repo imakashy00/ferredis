@@ -1,18 +1,18 @@
-use std::time::{ SystemTime, UNIX_EPOCH };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 
-use crate::core::keyspace::{ DataStruct, Entry, Ferredis };
+use crate::core::keyspace::{DataStruct, Entry, Ferredis};
 
-pub mod list_cmd;
 pub mod hashmap_cmd;
+pub mod keyspace_cmd;
+pub mod list_cmd;
+pub mod pub_sub_cmd;
+pub mod registry;
+pub mod server_cmd;
 pub mod set_cmd;
 pub mod string_cmd;
-pub mod keyspace_cmd;
-pub mod server_cmd;
-pub mod registry;
 pub mod transactions_cmd;
-pub mod pub_sub_cmd;
 
 fn is_expired(entry: &Entry) -> bool {
     match entry.expires_at {
@@ -38,5 +38,8 @@ pub fn fetch_entry_with_key<'a>(key: &Bytes, db: &'a mut Ferredis) -> Option<&'a
 }
 
 pub fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("before 1970").as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("before 1970")
+        .as_secs()
 }

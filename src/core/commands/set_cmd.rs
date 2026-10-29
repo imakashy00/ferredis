@@ -1,11 +1,14 @@
-use std::{ cmp::{ Ordering, min }, collections::HashSet };
+use std::{
+    cmp::{Ordering, min},
+    collections::HashSet,
+};
 
 use bytes::Bytes;
 
 use crate::{
     core::{
-        commands::{ fetch_entry_with_key, now_secs },
-        keyspace::{ DataStruct, Entry, Ferredis },
+        commands::{fetch_entry_with_key, now_secs},
+        keyspace::{DataStruct, Entry, Ferredis},
     },
     protocol::Frame,
 };
@@ -18,12 +21,15 @@ pub fn handle_sadd(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         }
         Some(true) => {}
         None => {
-            db.store.insert(key.clone(), Entry {
-                value: DataStruct::Set(HashSet::new()),
-                expires_at: None,
-                last_access: now_secs(),
-                approx_size: size_of_val(key),
-            });
+            db.store.insert(
+                key.clone(),
+                Entry {
+                    value: DataStruct::Set(HashSet::new()),
+                    expires_at: None,
+                    last_access: now_secs(),
+                    approx_size: size_of_val(key),
+                },
+            );
         }
     }
     let Some(entry) = fetch_entry_with_key(key, db) else {
@@ -118,13 +124,12 @@ pub fn handle_spop(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         return Frame::Error("Err: Wrong number of arguments".into());
     }
     let mut count = match args.get(2) {
-        Some(value) =>
-            match String::from_utf8_lossy(value).parse::<usize>() {
-                Ok(val) => val,
-                Err(_) => {
-                    return Frame::Error("Failed to parse".into());
-                }
+        Some(value) => match String::from_utf8_lossy(value).parse::<usize>() {
+            Ok(val) => val,
+            Err(_) => {
+                return Frame::Error("Failed to parse".into());
             }
+        },
         None => 1,
     };
     match fetch_entry_with_key(key, db) {
@@ -166,13 +171,12 @@ pub fn handle_srandmember(db: &mut Ferredis, args: &[Bytes]) -> Frame {
         return Frame::Error("Err: Wrong number of arguments".into());
     }
     let mut count = match args.get(2) {
-        Some(value) =>
-            match String::from_utf8_lossy(value).parse::<isize>() {
-                Ok(val) => val,
-                Err(_) => {
-                    return Frame::Error("Failed to parse".into());
-                }
+        Some(value) => match String::from_utf8_lossy(value).parse::<isize>() {
+            Ok(val) => val,
+            Err(_) => {
+                return Frame::Error("Failed to parse".into());
             }
+        },
         None => 1,
     };
     match fetch_entry_with_key(key, db) {

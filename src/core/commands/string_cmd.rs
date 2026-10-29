@@ -2,8 +2,8 @@ use bytes::Bytes;
 
 use crate::{
     core::{
-        commands::{ fetch_entry_with_key, fetch_value_with_key, now_secs },
-        keyspace::{ DataStruct, Entry, Ferredis },
+        commands::{fetch_entry_with_key, fetch_value_with_key, now_secs},
+        keyspace::{DataStruct, Entry, Ferredis},
     },
     protocol::Frame,
 };
@@ -13,13 +13,12 @@ pub fn handle_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     let value = &args[2];
     let expire_after = match args.len() {
         3 => None,
-        5 =>
-            match String::from_utf8_lossy(&args[4]).as_ref().parse::<u64>() {
-                Ok(ttl) => { Some(ttl) }
-                Err(_) => {
-                    return Frame::Error("Failed to parse ttl".into());
-                }
+        5 => match String::from_utf8_lossy(&args[4]).as_ref().parse::<u64>() {
+            Ok(ttl) => Some(ttl),
+            Err(_) => {
+                return Frame::Error("Failed to parse ttl".into());
             }
+        },
         _ => {
             return Frame::Error("Wrong number of arguments for set".into());
         }
@@ -29,22 +28,24 @@ pub fn handle_set(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     }
     let approx_size = 32 + value.len();
     let expires_at = match expire_after {
-        Some(t) =>
-            match now_secs().checked_add(t) {
-                Some(deadline) => Some(deadline),
-                None => {
-                    return Frame::Error("ERR invalid expire time in 'set' command".into());
-                }
+        Some(t) => match now_secs().checked_add(t) {
+            Some(deadline) => Some(deadline),
+            None => {
+                return Frame::Error("ERR invalid expire time in 'set' command".into());
             }
+        },
         None => None,
     };
     // store in db
-    db.store.insert(key.clone(), Entry {
-        value: DataStruct::String(value.clone()),
-        expires_at: expires_at,
-        last_access: now_secs(),
-        approx_size: 32 + value.len(),
-    });
+    db.store.insert(
+        key.clone(),
+        Entry {
+            value: DataStruct::String(value.clone()),
+            expires_at: expires_at,
+            last_access: now_secs(),
+            approx_size: 32 + value.len(),
+        },
+    );
     db.current_memory_usage += approx_size;
     return Frame::Simple("OK".into());
 }
@@ -96,43 +97,39 @@ pub fn handle_mset(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     }
     // iterate over all the key-value and insert them
     for kv in pairs.chunks_exact(2) {
-        db.store.insert(kv[0].clone(), Entry {
-            value: DataStruct::String(kv[1].clone()),
-            expires_at: None,
-            last_access: 0,
-            approx_size: 32 + kv[1].len(),
-        });
+        db.store.insert(
+            kv[0].clone(),
+            Entry {
+                value: DataStruct::String(kv[1].clone()),
+                expires_at: None,
+                last_access: 0,
+                approx_size: 32 + kv[1].len(),
+            },
+        );
     }
 
     Frame::Simple("OK".into())
 }
 pub fn handle_mget(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // Array reply : list of values at specified keys
-    Frame::Array(
-        Some(
-            args
-                .iter()
-                .skip(1)
-                .map(|key| {
-                    match fetch_value_with_key(key, db) {
-                        Some(value) => {
-                            match value {
-                                DataStruct::String(string_value) => {
-                                    return Frame::Bulk(Some(string_value.clone()));
-                                }
-                                _ => {
-                                    return Frame::Bulk(None);
-                                }
-                            }
-                        }
-                        None => {
-                            return Frame::Bulk(None);
-                        }
+    Frame::Array(Some(
+        args.iter()
+            .skip(1)
+            .map(|key| match fetch_value_with_key(key, db) {
+                Some(value) => match value {
+                    DataStruct::String(string_value) => {
+                        return Frame::Bulk(Some(string_value.clone()));
                     }
-                })
-                .collect()
-        )
-    )
+                    _ => {
+                        return Frame::Bulk(None);
+                    }
+                },
+                None => {
+                    return Frame::Bulk(None);
+                }
+            })
+            .collect(),
+    ))
 }
 pub fn handle_incr(db: &mut Ferredis, args: &[Bytes]) -> Frame {
     // ERR value is not an integer or out of range
@@ -174,19 +171,17 @@ pub fn handle_strlen(db: &mut Ferredis, args: &[Bytes]) -> Frame {
 fn incr_by(db: &mut Ferredis, key: &Bytes, delta: i64) -> Frame {
     let current = match db.store.get(key) {
         None => 0,
-        Some(entry) =>
-            match &entry.value {
-                DataStruct::String(bytes) =>
-                    match parse_i64(bytes) {
-                        Some(num) => num,
-                        None => {
-                            return Frame::Error("Err not int".into());
-                        }
-                    }
-                _ => {
-                    return Frame::Error("Err wrongtype".into());
+        Some(entry) => match &entry.value {
+            DataStruct::String(bytes) => match parse_i64(bytes) {
+                Some(num) => num,
+                None => {
+                    return Frame::Error("Err not int".into());
                 }
+            },
+            _ => {
+                return Frame::Error("Err wrongtype".into());
             }
+        },
     };
     let Some(new_value) = current.checked_add(delta) else {
         return Frame::Error("Integer overflow".into());
@@ -203,5 +198,3 @@ fn parse_i64(bytes: &[u8]) -> Option<i64> {
         None
     }
 }
-
-

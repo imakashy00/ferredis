@@ -3,7 +3,13 @@ use std::collections::HashMap;
 use bytes::Bytes;
 use nix::unistd::Pid;
 
-use crate::{ core::{ commands::now_secs, keyspace::{ Entry, TTLMap } }, server::Config };
+use crate::{
+    core::{
+        commands::now_secs,
+        keyspace::{Entry, TTLMap},
+    },
+    server::Config,
+};
 
 pub struct Ferredis {
     pub store: HashMap<Bytes, Entry>,
@@ -42,12 +48,15 @@ impl Ferredis {
             }
             None => {
                 self.current_memory_usage += size_kv;
-                self.store.insert(key, Entry {
-                    value: super::DataStruct::String(value),
-                    expires_at: None,
-                    last_access: now_secs(),
-                    approx_size: size_kv,
-                });
+                self.store.insert(
+                    key,
+                    Entry {
+                        value: super::DataStruct::String(value),
+                        expires_at: None,
+                        last_access: now_secs(),
+                        approx_size: size_kv,
+                    },
+                );
             }
         }
     }

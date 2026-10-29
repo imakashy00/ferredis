@@ -1,5 +1,5 @@
 // SCOPE:: MAX ouput buffer, IDLE timout
-use bytes::{ BufMut, Buf, Bytes, BytesMut };
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::protocol::ProtocolError;
 
@@ -73,7 +73,7 @@ impl Frame {
         let next = line_end + 2;
         match type_byte {
             b'+' => {
-                let s = std::str::from_utf8(line).or_else(|_| { Err(ProtocolError::InvalidUtf8) })?;
+                let s = std::str::from_utf8(line).or_else(|_| Err(ProtocolError::InvalidUtf8))?;
                 Ok(Some((Frame::Simple(s.to_owned()), next)))
             }
             b'-' => {
@@ -146,8 +146,7 @@ fn find_crlf(buffer: &[u8], start: usize) -> Option<usize> {
 }
 
 fn parse_int(line: &[u8]) -> Result<i64, ProtocolError> {
-    std::str
-        ::from_utf8(line)
+    std::str::from_utf8(line)
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .map_or_else(|| Err(ProtocolError::InvalidInteger), Ok)
@@ -155,7 +154,7 @@ fn parse_int(line: &[u8]) -> Result<i64, ProtocolError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::protocol::{ into_args };
+    use crate::protocol::into_args;
 
     use super::*;
 
@@ -191,7 +190,7 @@ mod tests {
     #[test]
     fn pipelined_frames_plus_trailing_partial() {
         let mut buf = BytesMut::from(
-            &b"*1\r\n$4\r\nPING\r\n*2\r\n$4\r\nECHO\r\n$2\r\nhi\r\n*1\r\n$4\r\nPI"[..]
+            &b"*1\r\n$4\r\nPING\r\n*2\r\n$4\r\nECHO\r\n$2\r\nhi\r\n*1\r\n$4\r\nPI"[..],
         );
         assert!(decode(&mut buf).unwrap().is_some()); // PING
         assert!(decode(&mut buf).unwrap().is_some()); // ECHO hi
@@ -227,16 +226,12 @@ mod tests {
 
     #[test]
     fn encode_roundtrip() {
-        let frame = Frame::Array(
-            Some(
-                vec![
-                    Frame::Simple("OK".into()),
-                    Frame::Integer(-5),
-                    bulk("hello"),
-                    Frame::Bulk(None)
-                ]
-            )
-        );
+        let frame = Frame::Array(Some(vec![
+            Frame::Simple("OK".into()),
+            Frame::Integer(-5),
+            bulk("hello"),
+            Frame::Bulk(None),
+        ]));
         let mut out = BytesMut::new();
         frame.encode(&mut out);
         assert_eq!(decode(&mut out).unwrap().unwrap(), frame);
