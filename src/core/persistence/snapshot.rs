@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use nix::{
     sys::wait::{WaitPidFlag, WaitStatus, waitpid},
     unistd::{ForkResult, fork},
@@ -9,7 +10,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::core::{DataStruct, keyspace::Ferredis, now_secs};
+use crate::core::{DataStruct, Entry, keyspace::Ferredis, now_secs};
 
 pub fn handle_snapshot(db: &mut Ferredis) {
     if let Some(child_pid) = db.bg_child_pid {
@@ -217,6 +218,31 @@ pub fn execute_binary_dump(db: &mut Ferredis) -> Result<()> {
     Ok(())
 }
 
+fn read_bytes(stream: &mut BufReader<File>, check_sum: &mut crc64fast::Digest) -> Result<Vec<u8>> {
+    let mut len_bytes = [0u8; 4];
+    stream.read_exact(&mut len_bytes)?;
+    check_sum.write(&len_bytes);
+    let len = u32::from_be_bytes(len_bytes) as usize;
+
+    let mut buf = vec![0u8; len];
+    stream.read_exact(&mut buf)?;
+    check_sum.write(&buf);
+
+    Ok(buf)
+}
+
+fn read_string(stream: &mut BufReader<File>, check_sum: &mut crc64fast::Digest) -> Result<String> {
+    let buf = read_bytes(stream, check_sum)?;
+    String::from_utf8(buf).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
+fn read_u64(stream: &mut BufReader<File>, check_sum: &mut crc64fast::Digest) -> Result<u64> {
+    let mut bytes = [0u8; 8];
+    stream.read_exact(&mut bytes)?;
+    check_sum.write(&bytes);
+    Ok(u64::from_be_bytes(bytes))
+}
+
 pub fn parse_snapshot_file(file: PathBuf, db: &mut Ferredis) -> Result<()> {
     // Open the file
     let snapshot_file = File::open(&file)?;
@@ -250,27 +276,132 @@ pub fn parse_snapshot_file(file: PathBuf, db: &mut Ferredis) -> Result<()> {
         let opcode = single_byte[0];
         match opcode {
             0xFA => {
-                let meta_type = "place_holder";
+                let meta_key = read_string(&mut stream, &mut check_sum)?;
                 // metadata
-                match meta_type {
-                    "ferredis-ver" => {}
-                    "ferredis-bits" => {}
-                    "ctime" => {}
-                    "used_mem" => {}
-                    _ => {}
+                match meta_key.as_str() {
+                    "ferredis-ver" => {
+                        let version = read_string(&mut stream, &mut check_sum)?;
+                        println!("Snapshot System Version: {}", version);
+                    }
+                    "ferredis-bits" => {
+                        let bits = read_string(&mut stream, &mut check_sum)?;
+                        let version = read_string(&mut stream, &mut check_sum)?;
+                        println!("Snapshot System Version: {}", version);
+                        // check arch type of the system
+                        if bits != (std::mem::size_of::<usize>() * 8).to_string() {
+                            println!("Warning: Architecture mismatch between file and host.");
+                        }
+                    }
+                    "ctime" => {
+                        let creation_time = read_u64(&mut stream, &mut check_sum)?;
+                        println!("Snapshot Created At (Timestamp): {}", creation_time);
+                    }
+                    "used_mem" => {
+                        let memory_used = read_u64(&mut stream, &mut check_sum)?;
+                        println!("Database Memory Usage at save: {} bytes", memory_used);
+                    }
+                    _ => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Unknown metadata key: {}", meta_key),
+                        ));
+                    }
                 }
             }
             0xFE => {
                 // Db index
+                // It tell which database the upcoming key value pair belongs to
+                // right now we have only one db
+                let mut index_buf = [0u8; 1];
+                stream.read_exact(&mut index_buf)?;
+                check_sum.write(&index_buf);
+
+                let curr_db_ind = index_buf[0];
+                println!(
+                    "Switching parser context to Database Index: {}",
+                    curr_db_ind
+                );
+                // for now only 0 ind
+                if curr_db_ind != 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Unknown db index key: {}", curr_db_ind),
+                    ));
+                }
+                // if ever support more then one db instance then it can be array of store or hashmap
+                // - switch to that db and load the key value pair to it after parsing the key value pair
+                // this all should be another 'loop'
             }
             0xFC => {
                 // key values
-                let key_type: DataStruct = DataStruct::String("()".into());
-                match key_type {
-                    DataStruct::String(byte) => {}
-                    DataStruct::List(dq) => {}
-                    DataStruct::Hash(hmap) => {}
-                    DataStruct::Set(hset) => {}
+                let mut expire_buf = [0u8; 8];
+                stream.read_exact(&mut expire_buf)?;
+                check_sum.write(&expire_buf);
+                let expire_at_time = u64::from_be_bytes(expire_buf);
+
+                let now = now_secs();
+                let is_expired = expire_at_time < now;
+
+                let mut type_buf = [0u8; 1];
+                stream.read_exact(&mut type_buf)?;
+                check_sum.write(&type_buf);
+                // read the bytes
+                let type_opcode = type_buf[0];
+                let key_bytes = Bytes::from(read_bytes(&mut stream, &mut check_sum)?);
+                let value_struct = match type_opcode {
+                    0x00 => {
+                        let value_bytes = Bytes::from(read_bytes(&mut stream, &mut check_sum)?);
+                        DataStruct::String(value_bytes)
+                    }
+                    0x01 => {
+                        let count = read_u64(&mut stream, &mut check_sum)?;
+                        let mut deque = std::collections::VecDeque::with_capacity(count as usize);
+                        for _ in 0..count {
+                            let element = Bytes::from(read_bytes(&mut stream, &mut check_sum)?);
+                            deque.push_back(element);
+                        }
+                        DataStruct::List(deque)
+                    }
+                    0x02 => {
+                        let count = read_u64(&mut stream, &mut check_sum)?;
+                        let mut map = std::collections::HashMap::with_capacity(count as usize);
+                        for _ in 0..count {
+                            let field = Bytes::from(read_bytes(&mut stream, &mut check_sum)?);
+                            let val = Bytes::from(read_bytes(&mut stream, &mut check_sum)?);
+                            map.insert(field, val);
+                        }
+                        DataStruct::Hash(map)
+                    }
+                    0x04 => {
+                        let count = read_u64(&mut stream, &mut check_sum)?;
+                        let mut set = std::collections::HashSet::with_capacity(count as usize);
+                        for _ in 0..count {
+                            let element = Bytes::from(read_bytes(&mut stream, &mut check_sum)?);
+                            set.insert(element);
+                        }
+                        DataStruct::Set(set)
+                    }
+                    _ => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Unknown type opcode: 0x{:02X}", type_opcode),
+                        ));
+                    }
+                };
+                if !is_expired {
+                    let entry = Entry {
+                        value: value_struct,
+                        expires_at: Some(expire_at_time),
+                        last_access: now,
+                        approx_size: 0, // TODO: calculate approx size
+                    };
+                    // store in db
+                    db.store.insert(key_bytes.clone(), entry);
+                    // build ttl map
+                    db.ttl_map.keys.push(key_bytes.clone());
+                    db.ttl_map
+                        .positions
+                        .insert(key_bytes, db.ttl_map.keys.len() - 1);
                 }
             }
             0xFF => {
@@ -279,11 +410,27 @@ pub fn parse_snapshot_file(file: PathBuf, db: &mut Ferredis) -> Result<()> {
             }
             _ => {
                 // unexpected byte throw error
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Unknown byte key: {:?}", single_byte),
+                ));
             }
         }
     }
     // check sum
-    let mut expected_check_sum = [0u8; 8];
+    let mut expected_checksum_buf = [0u8; 8];
+    stream.read_exact(&mut expected_checksum_buf)?;
+    let expected_checksum = u64::from_be_bytes(expected_checksum_buf);
+    let calculated_checksum = check_sum.sum64();
 
+    // validate the check sum
+
+    if calculated_checksum != expected_checksum {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "CRITICAL DATA CORRUPTION DETECTED: Checksum mismatch😱",
+        ));
+    }
+    println!("Snapshot loaded safely ...");
     Ok(())
 }
