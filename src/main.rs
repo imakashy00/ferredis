@@ -37,11 +37,15 @@ async fn main() -> io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     eprintln!("Server running on port:6379...");
 
-    // Semaphore control how many tasks or threads can access a shared resource at the same time
+    // Semaphore control how many concurrent asynchronous 'Tasks' can be active at the same time
     let semaphore = Arc::new(Semaphore::new(config.maxclients as usize));
-    // Configure bounded channels
+    // Configure bounded channels; default = 1024 CommandMsg in the channel
     let (engine_tx, mut engine_rx) =
         mpsc::channel::<CommandMsg>(config.engine_channel_capacity as usize);
+    // NOTE: Reciever<T> is mutable becuase it has to modify its internal queue read pinter,
+    // left messages tracker and wake the up when new task arrive whereas
+    // Sender<T> uses Arc styles and atomic pointers to safely push messages into the channel from multiple threads at once.
+
     // Spawn the centralized Redis execution engine (Single-threaded execution state)
     tokio::spawn(async move {
         // Single threaded so no Arc<Mutex<>> required here 💪
@@ -59,7 +63,7 @@ async fn main() -> io::Result<()> {
                         // Send the result back to the specific client connection task
                         let _ = msg.respond_to.send(reply);
                     }
-                    None => break,          // every sender dropped: shut down
+                    None => break,       // every sender dropped: shut down
                 },
                 _ = active_expire_interval.tick() => {
                     // active expiration
@@ -76,9 +80,9 @@ async fn main() -> io::Result<()> {
             Ok((mut stream, _)) => {
                 // Enable TCP_NODELAY
                 // By default it is enabled to optimize bandwith
-                // Nagle Algo instructs Kernal to hold small packets of data and release only is reicieves (Acknowledgement)ACK or Maximum Segment Size(MSS) is reached
+                // Nagle Algo instructs Kernal to hold small packets of data and release only if recieves (Acknowledgement)ACK or Maximum Segment Size(MSS) is reached
                 // for small data like +OK\r\n it becomes deadlock as kernal waits for ACK and client wait for response to send ACK
-                // When disabled Kernal transmit every samll packet without and confirmation or waiting - prioritizing low latency over packet size.
+                // When disabled Kernal transmit every samll packet without any confirmation or waiting - prioritizing low latency over packet size.
                 if let Err(e) = stream.set_nodelay(true) {
                     eprintln!("Failed to set TCP_NODELAY: {:?}", e);
                     continue; // Or handle error based on your strictness

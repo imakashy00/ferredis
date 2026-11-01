@@ -1,10 +1,9 @@
-use std::io::{self, Error};
+use std::io;
 
 use bytes::BytesMut;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    stream,
     sync::{mpsc, oneshot},
 };
 
@@ -40,31 +39,20 @@ pub async fn handle_stream(mut stream: TcpStream, tx: mpsc::Sender<CommandMsg>) 
     // loop for persistence connection
     loop {
         // read data from stream and write to input buffer
-        // let bytes = read_stream_write_input_buff(&mut stream, &mut input_buffer).await?;
-        // if bytes == 0 {
-        //     return Ok(());
-        // }
-        let bytes = stream.read_buf(&mut input_buffer).await?; // exact count of valid bytes recieved
+        let bytes = read_stream_write_input_buff(&mut stream, &mut input_buffer).await?;
         if bytes == 0 {
-            if !input_buffer.is_empty() {
-                eprintln!(
-                    "Warning: Client disconnected!!!, left partial frame: {:?}",
-                    input_buffer
-                );
-            } else {
-                eprintln!("Client Disconnected!!!");
-            }
             return Ok(());
         }
         loop {
             match decode(&mut input_buffer) {
+                // ignore empty array
                 Ok(Some(Frame::Array(Some(items)))) if items.is_empty() => {
                     continue;
                 }
                 // Execute the frame and store the encoded response in output buffer
                 Ok(Some(frame)) => {
                     // one-time response channel for this specific command
-                    // Oneshot is like FnOnce not buffer size; use in request and response
+                    // Oneshot is like FnOnce, with no buffer size and only hold one value at a time; use in request and response
                     let (reply_tx, reply_rx) = oneshot::channel();
 
                     // BACK-PRESSURE HAPPENS HERE:
@@ -78,7 +66,7 @@ pub async fn handle_stream(mut stream: TcpStream, tx: mpsc::Sender<CommandMsg>) 
                         .await
                         .is_err()
                     {
-                        return Err(io::Error::new(io::ErrorKind::BrokenPipe, "Engine shutdown"));
+                        return Err(io::Error::new(io::ErrorKind::BrokenPipe, "Engine shutdown!"));
                     }
                     // Wait for the single-threaded engine to finish our job
                     if let Ok(response_frame) = reply_rx.await {
