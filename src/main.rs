@@ -24,8 +24,15 @@ async fn main() -> io::Result<()> {
     let config = Config::parse();
     let addr = format!("{}:{}", config.bind, config.port);
     let mut db: Ferredis = Ferredis::new(config.clone());
-    // Parse snapshot file and load db
-    parse_snapshot_file(config.snap_dir.clone(), &mut db)?;
+    if db.config.snapshot {
+        // Parse snapshot file and load db
+        match parse_snapshot_file(config.snap_dir.clone(), &mut db) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("Error parsing the snapshot file:: {e}");
+            }
+        }
+    }
     // Bind Port
     let listener = TcpListener::bind(addr).await?;
     eprintln!("Server running on port:6379...");

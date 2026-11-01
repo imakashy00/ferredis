@@ -1,9 +1,10 @@
-use std::io;
+use std::io::{self, Error};
 
 use bytes::BytesMut;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    stream,
     sync::{mpsc, oneshot},
 };
 
@@ -14,7 +15,23 @@ pub struct CommandMsg {
     // Oneshot channel allows the engine to send the reply back directly to specific client task
     pub respond_to: oneshot::Sender<Frame>,
 }
-
+async fn read_stream_write_input_buff(
+    stream: &mut TcpStream,
+    input_buffer: &mut BytesMut,
+) -> io::Result<usize> {
+    let bytes = stream.read_buf(input_buffer).await?; // exact count of valid bytes recieved
+    if bytes == 0 {
+        if !input_buffer.is_empty() {
+            eprintln!(
+                "Warning: Client disconnected!!!, left partial frame: {:?}",
+                input_buffer
+            );
+        } else {
+            eprintln!("Client Disconnected!!!");
+        }
+    }
+    return Ok(bytes);
+}
 pub async fn handle_stream(mut stream: TcpStream, tx: mpsc::Sender<CommandMsg>) -> io::Result<()> {
     // Dynamically Growable buffer
     let mut input_buffer = BytesMut::new(); // I can use Vec<u8> with read_to_end and take but is messay and complex for persistent loop(for upcoming bytes in the stream)
@@ -22,15 +39,20 @@ pub async fn handle_stream(mut stream: TcpStream, tx: mpsc::Sender<CommandMsg>) 
 
     // loop for persistence connection
     loop {
+        // read data from stream and write to input buffer
+        // let bytes = read_stream_write_input_buff(&mut stream, &mut input_buffer).await?;
+        // if bytes == 0 {
+        //     return Ok(());
+        // }
         let bytes = stream.read_buf(&mut input_buffer).await?; // exact count of valid bytes recieved
         if bytes == 0 {
             if !input_buffer.is_empty() {
                 eprintln!(
-                    "Warning: Client disconnected, left partial frame: {:?}",
+                    "Warning: Client disconnected!!!, left partial frame: {:?}",
                     input_buffer
                 );
             } else {
-                eprintln!("Client Disconnected!");
+                eprintln!("Client Disconnected!!!");
             }
             return Ok(());
         }

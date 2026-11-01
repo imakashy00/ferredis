@@ -377,9 +377,18 @@ const TAG_STRING: u8 = 0x00;
 const TAG_LIST: u8 = 0x01;
 const TAG_HASH: u8 = 0x10;
 const TAG_SET: u8 = 0x11;
-pub fn parse_snapshot_file(file: PathBuf, db: &mut Ferredis) -> Result<()> {
+pub fn parse_snapshot_file(dir: PathBuf, db: &mut Ferredis) -> Result<()> {
+    let file = dir.join("dump.rdb");
+
     // Open the file
-    let snapshot_file = File::open(&file)?;
+    let snapshot_file = match File::open(&file) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("No snapshot at {:?}. Starting empty with database.", file);
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
     let mut stream = BufReader::new(snapshot_file);
     // Initialize the check sum
     let mut check_sum = crc64fast::Digest::new();
@@ -444,7 +453,7 @@ pub fn parse_snapshot_file(file: PathBuf, db: &mut Ferredis) -> Result<()> {
                             format!("Unknown metadata key: {}", meta_key),
                         ));
                     }
-                    }
+                }
             }
             0xFE => {
                 // Db index
