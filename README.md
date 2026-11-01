@@ -30,16 +30,6 @@ Ferredis separates network connection handling from database command execution.
 
 This design keeps database execution centralized while allowing multiple clients to connect asynchronously.
 
-## Project Structure
-
-```text
-src/
-├── main.rs          # Server bootstrap and connection handling
-├── server/          # Runtime configuration and engine plumbing
-├── protocol/        # RESP frame codec and command dispatch
-└── core/            # Datastore, data structures, and command handlers
-```
-
 ## Getting Started
 
 ### Prerequisites
@@ -99,6 +89,10 @@ Ferredis was benchmarked against Redis using `redis-benchmark`.
 | Median latency (p50) | 0.151 ms | 0.111 ms |
 | Concurrent clients   |       50 |       50 |
 | Total requests       |  100,000 |  100,000 |
+
+<img width="669" height="158" alt="Screenshot 2026-11-01 at 9 21 00 PM" src="https://github.com/user-attachments/assets/1972af56-35a1-49d1-a55d-67cb6acab3ed" />
+<img width="733" height="164" alt="Screenshot 2026-11-01 at 9 24 38 PM" src="https://github.com/user-attachments/assets/8cb7676c-10c7-4d32-9142-dce3e4cb020e" />
+<img width="824" height="546" alt="Screenshot 2026-11-01 at 9 26 22 PM" src="https://github.com/user-attachments/assets/ca86b610-54d4-4095-88f0-35253f4884e1" />
 
 **Ferredis achieved approximately 94.05% of Redis's throughput** in this particular benchmark.
 
